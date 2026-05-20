@@ -1,0 +1,184 @@
+:root {
+  --bg: #f6f7fb;
+  --card: #ffffff;
+  --text: #1e1e24;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, sans-serif;
+  color: var(--text);
+  background: var(--bg);
+}
+
+.app {
+  max-width: 940px;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+header p {
+  margin-top: 0.25rem;
+}
+
+.composer,
+.tab-panel {
+  background: var(--card);
+  border-radius: 12px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
+.field {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0.7rem 0;
+}
+
+.field input,
+.field select,
+.field textarea {
+  width: 100%;
+  padding: 0.5rem;
+  border: 1px solid #d1d6e0;
+  border-radius: 8px;
+}
+
+.inline-field {
+  max-width: 250px;
+}
+
+.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.switch {
+  position: relative;
+  width: 48px;
+  height: 26px;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  inset: 0;
+  background: #c0c7d3;
+  border-radius: 26px;
+}
+
+.slider::before {
+  content: "";
+  position: absolute;
+  height: 20px;
+  width: 20px;
+  left: 3px;
+  top: 3px;
+  background: white;
+  border-radius: 50%;
+  transition: transform 0.2s ease;
+}
+
+.switch input:checked + .slider {
+  background: #2e79ff;
+}
+
+.switch input:checked + .slider::before {
+  transform: translateX(22px);
+}
+
+.preview-wrap {
+  border: 2px dashed #c8ceda;
+  border-radius: 10px;
+  padding: 0.8rem;
+}
+
+.preview-label {
+  margin-top: 0;
+}
+
+#previewImage {
+  width: 100%;
+  max-height: 280px;
+  object-fit: cover;
+  border-radius: 10px;
+}
+
+#shareButton {
+  margin-top: 0.8rem;
+  border: 0;
+  background: #1f6fff;
+  color: white;
+  border-radius: 8px;
+  padding: 0.65rem 1rem;
+  cursor: pointer;
+}
+
+.tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.tab {
+  border: 1px solid #c8ceda;
+  background: white;
+  padding: 0.45rem 0.85rem;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.tab.active {
+  background: #1f6fff;
+  color: white;
+}
+
+.hidden {
+  display: none;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 0.75rem;
+}
+
+.post {
+  border: 4px solid #9aa6b2;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.post img {
+  display: block;
+  width: 100%;
+  height: 160px;
+  object-fit: cover;
+}
+
+.meta {
+  padding: 0.5rem;
+  font-size: 0.88rem;
+}
+
+.summary {
+  margin: 0;
+  padding-left: 1rem;
+}
+
+#notif {
+  min-height: 1.5rem;
+  color: #155d27;
+  font-weight: 600;
+}

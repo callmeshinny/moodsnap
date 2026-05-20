@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MoodSnap</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <header>
+        <h1>MoodSnap</h1>
+        <p>Share private moments with optional mood colours.</p>
+      </header>
+
+      <section class="composer" aria-label="Create a post">
+        <h2>Create post</h2>
+        <label class="field">
+          <span>Take / upload photo</span>
+          <input id="photoInput" type="file" accept="image/*" />
+        </label>
+
+        <div class="field toggle-row">
+          <span>Moody Mode</span>
+          <label class="switch" for="moodyToggle">
+            <input id="moodyToggle" type="checkbox" />
+            <span class="slider" aria-hidden="true"></span>
+          </label>
+        </div>
+
+        <label class="field">
+          <span>Choose mood</span>
+          <select id="moodSelect" disabled>
+            <option value="happy">Happy (Yellow)</option>
+            <option value="calm">Calm (Blue)</option>
+            <option value="romantic">Romantic (Pink)</option>
+            <option value="energetic">Energetic (Orange)</option>
+            <option value="focused">Focused (Purple)</option>
+          </select>
+        </label>
+
+        <label class="field">
+          <span>Add caption (optional)</span>
+          <textarea id="captionInput" rows="2" placeholder="What are you feeling?"></textarea>
+        </label>
+
+        <div class="preview-wrap">
+          <p class="preview-label">Preview</p>
+          <img id="previewImage" alt="Photo preview" hidden />
+          <div id="previewPlaceholder">No photo selected yet.</div>
+        </div>
+
+        <button id="shareButton" type="button">Share</button>
+      </section>
+
+      <nav class="tabs" aria-label="Post views">
+        <button class="tab active" data-tab="feed" type="button">Friends feed</button>
+        <button class="tab" data-tab="mood" type="button">Mood filter tab</button>
+        <button class="tab" data-tab="summary" type="button">Weekly mood summary</button>
+      </nav>
+
+      <section id="feedTab" class="tab-panel">
+        <h2>Friends feed</h2>
+        <div id="feed" class="grid"></div>
+      </section>
+
+      <section id="moodTab" class="tab-panel hidden">
+        <h2>Mood filter tab</h2>
+        <label class="field inline-field">
+          <span>Show mood:</span>
+          <select id="moodFilter">
+            <option value="all">All</option>
+            <option value="happy">Happy</option>
+            <option value="calm">Calm</option>
+            <option value="romantic">Romantic</option>
+            <option value="energetic">Energetic</option>
+            <option value="focused">Focused</option>
+          </select>
+        </label>
+        <div id="moodFeed" class="grid"></div>
+      </section>
+
+      <section id="summaryTab" class="tab-panel hidden">
+        <h2>Weekly mood colour summary</h2>
+        <ul id="summaryList" class="summary"></ul>
+      </section>
+
+      <p id="notif" role="status" aria-live="polite"></p>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>
