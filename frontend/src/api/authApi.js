@@ -1,37 +1,22 @@
-import { apiClient } from "./apiClient";
+import axios from "axios";
+import { API_BASE_URL } from "../constants/config";
 
-export const signUpApi = async ({ username, email, password }) => {
-  const response = await apiClient.post("/auth/signup", {
-    username,
-    email,
-    password
-  });
-
+export const signUpApi = async (data) => {
+  const response = await axios.post(`${API_BASE_URL}/auth/signup`, data);
   return response.data;
 };
 
-export const verifyOtpApi = async ({ email, otp }) => {
-  const response = await apiClient.post("/auth/verify-otp", {
-    email,
-    otp
-  });
-
+export const verifyOtpApi = async (data) => {
+  const response = await axios.post(`${API_BASE_URL}/auth/verify-otp`, data);
   return response.data;
 };
 
-export const signInApi = async ({ email, password }) => {
-  const response = await apiClient.post("/auth/signin", {
-    email,
-    password
-  });
-
+export const signInApi = async (data) => {
+  const response = await axios.post(`${API_BASE_URL}/auth/signin`, data);
   return response.data;
 };
 
-export const resendOtpApi = async ({ email }) => {
-  const response = await apiClient.post("/auth/resend-otp", {
-    email
-  });
-
+export const resendOtpApi = async (email) => {
+  const response = await axios.post(`${API_BASE_URL}/auth/resend-otp`, { email });
   return response.data;
 };

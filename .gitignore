@@ -70,3 +70,8 @@ uploads/
 test.jpg
 test.jpeg
 test.png
+
+# iOS / device logs
+frontend/ios-device-log.txt
+*.log
+*.txt.log
