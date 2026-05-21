@@ -52,18 +52,17 @@ export default function TabsLayout() {
       />
 
       <Tabs.Screen
-        name="messages"
-        options={{
-          title: "Messages",
-          tabBarIcon: () => <TabIcon emoji="💬" />,
-        }}
-      />
-
-      <Tabs.Screen
         name="profile"
         options={{
           title: "Profile",
           tabBarIcon: () => <TabIcon emoji="👤" />,
+        }}
+      />
+
+      <Tabs.Screen
+        name="messages"
+        options={{
+          href: null,
         }}
       />
     </Tabs>
