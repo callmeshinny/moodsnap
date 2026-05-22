@@ -24,25 +24,40 @@ export const getMoodCalendar = async (userId: string) => {
     throw new Error(error.message);
   }
 
-  const latestByDate = new Map<string, SnapRecord>();
+  const snapsByDate = new Map<string, SnapRecord[]>();
 
   for (const snap of snaps || []) {
     const date = toLocalDateKey(snap.created_at);
-    const existing = latestByDate.get(date);
-
-    if (!existing || new Date(snap.created_at) > new Date(existing.created_at)) {
-      latestByDate.set(date, snap);
-    }
+    const current = snapsByDate.get(date) || [];
+    current.push(snap);
+    snapsByDate.set(date, current);
   }
 
-  const entries = Array.from(latestByDate.entries()).map(([date, snap]) => ({
-    date,
-    mood: snap.mood,
-    snapId: snap.id,
-    imageUrl: snap.image_url,
-    imagePublicId: snap.cloudinary_public_id || snap.image_public_id || null,
-    createdAt: snap.created_at,
-  }));
+  const entries = Array.from(snapsByDate.entries()).map(([date, daySnaps]) => {
+    const sortedSnaps = [...daySnaps].sort(
+      (first, second) =>
+        new Date(second.created_at).getTime() -
+        new Date(first.created_at).getTime()
+    );
+    const latestSnap = sortedSnaps[0];
+
+    return {
+      date,
+      mood: latestSnap.mood,
+      snapId: latestSnap.id,
+      imageUrl: latestSnap.image_url,
+      imagePublicId:
+        latestSnap.cloudinary_public_id || latestSnap.image_public_id || null,
+      createdAt: latestSnap.created_at,
+      snaps: sortedSnaps.map((snap) => ({
+        id: snap.id,
+        mood: snap.mood,
+        imageUrl: snap.image_url,
+        imagePublicId: snap.cloudinary_public_id || snap.image_public_id || null,
+        createdAt: snap.created_at,
+      })),
+    };
+  });
 
   const now = new Date();
   const currentMonthEnd = new Date(

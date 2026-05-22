@@ -30,7 +30,8 @@ export const getFriendLink = async (userId: string) => {
 
   return {
     userId,
-    friendLink: `moodsnap.cam/${encodeURIComponent(user.username)}`,
+    username: user.username,
+    friendLink: `https://moodsnap-92ps.onrender.com/friend/${encodeURIComponent(user.username)}`,
   };
 };
 
@@ -301,8 +302,12 @@ export const getAcceptedFriendIds = async (userId: string): Promise<string[]> =>
 };
 
 export const getVisibleSnapUserIds = async (userId: string): Promise<string[]> => {
-  const friendIds = await getAcceptedFriendIds(userId);
-  return Array.from(new Set([userId, ...friendIds]));
+  try {
+    const friendIds = await getAcceptedFriendIds(userId);
+    return Array.from(new Set([userId, ...friendIds]));
+  } catch {
+    return [userId];
+  }
 };
 
 export const getPendingFriendRequests = async (userId: string) => {

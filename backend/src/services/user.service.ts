@@ -122,7 +122,7 @@ export const updateUserProfilePhoto = async (
     "moodsnap/profile_photos"
   );
 
-  const { data: user, error } = await supabase
+  let { data: user, error } = await supabase
     .from("users")
     .update({
       avatar_url: uploadedImage.secure_url,
@@ -133,8 +133,27 @@ export const updateUserProfilePhoto = async (
     .select("id, username, email, avatar_url, avatar_public_id, timezone, calendar_mode, is_verified, created_at, updated_at")
     .single();
 
+  if (error && error.message?.includes("avatar_public_id")) {
+    const fallback = await supabase
+      .from("users")
+      .update({
+        avatar_url: uploadedImage.secure_url,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", userId)
+      .select("id, username, email, avatar_url, timezone, calendar_mode, is_verified, created_at, updated_at")
+      .single();
+
+    user = fallback.data as any;
+    error = fallback.error as any;
+  }
+
   if (error) {
     throw new Error(error.message);
+  }
+
+  if (!user) {
+    throw new Error("Failed to update profile photo");
   }
 
   if (currentUser.avatarPublicId) {
