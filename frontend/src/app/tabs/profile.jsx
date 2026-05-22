@@ -69,8 +69,10 @@ export default function ProfileScreen() {
   const [draftName, setDraftName] = useState(user?.username || "");
   const [savingName, setSavingName] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [colorModalVisible, setColorModalVisible] = useState(false);
   const [ratingModalVisible, setRatingModalVisible] = useState(false);
   const [termsVisible, setTermsVisible] = useState(false);
+  const [privacyVisible, setPrivacyVisible] = useState(false);
   const [selectedRating, setSelectedRating] = useState(0);
   const [friendRequests, setFriendRequests] = useState([]);
   const [friendsVisible, setFriendsVisible] = useState(false);
@@ -101,38 +103,58 @@ export default function ProfileScreen() {
   };
 
   const getInviteMessage = (link) =>
-    `Add me on MoodSnap ${link} then share our mood`;
+    `Add me on MoodSnap: ${link}`;
 
   const getFriendLink = async () => {
-    const link = friendLink || (await refreshFriendLink?.());
+    try {
+      const link = friendLink || (await refreshFriendLink?.());
 
-    if (!link) {
-      Alert.alert("Friend link unavailable", "Please try again in a moment.");
+      if (!link) {
+        Alert.alert("Friend link unavailable", "Please try again in a moment.");
+        return null;
+      }
+
+      return link;
+    } catch (error) {
+      Alert.alert(
+        "Friend link unavailable",
+        error.response?.data?.message || error.message || "Please try again in a moment."
+      );
       return null;
     }
-
-    return link;
   };
 
   const handleCopyFriendLink = async () => {
-    const link = await getFriendLink();
+    const link = displayFriendLink;
 
     if (!link) {
       return;
     }
 
-    await Clipboard.setStringAsync(getInviteMessage(link));
-    Alert.alert("Copied", "Your MoodSnap invite is ready to paste.");
+    try {
+      await Clipboard.setStringAsync(getInviteMessage(link));
+      Alert.alert("Copied", "Your MoodSnap invite URL is ready to paste.");
+    } catch {
+      Alert.alert("Copy failed", "Please try again.");
+    }
   };
 
   const handleShareFriendLink = async () => {
-    const link = await getFriendLink();
+    const link = displayFriendLink;
 
     if (!link) {
       return;
     }
 
-    await Share.share({ message: getInviteMessage(link) });
+    try {
+      await Share.share({
+        message: getInviteMessage(link),
+        url: link,
+        title: "Add me on MoodSnap",
+      });
+    } catch {
+      Alert.alert("Share failed", "Please try again.");
+    }
   };
 
   const handleEditProfilePhoto = async () => {
@@ -164,9 +186,9 @@ export default function ProfileScreen() {
     } catch (error) {
       Alert.alert(
         "Upload failed",
-        error instanceof Error
-          ? error.message
-          : "Could not update your profile photo."
+        error.response?.data?.message ||
+          error.message ||
+          "Could not update your profile photo."
       );
     } finally {
       setUploadingPhoto(false);
@@ -279,13 +301,45 @@ export default function ProfileScreen() {
   };
 
   const displayName = user?.username || "MoodSnap user";
+  const displayFriendLink = user?.username
+    ? `moodsnap.cam/${encodeURIComponent(user.username)}`
+    : "Loading share URL...";
+  const profileColor = user?.profileColor || COLORS.primary;
+
+  const colorOptions = [
+    "#F65078",
+    "#FF8A00",
+    "#FFD166",
+    "#06D6A0",
+    "#118AB2",
+    "#7B61FF",
+    "#FF4FD8",
+    "#FFFFFF",
+  ];
+
+  const handleChooseProfileColor = async (color) => {
+    try {
+      setColorModalVisible(false);
+      await updateUser?.({ profileColor: color });
+      await refreshAppData?.();
+    } catch (error) {
+      Alert.alert(
+        "Update failed",
+        error.response?.data?.message || error.message || "Could not update colour."
+      );
+    }
+  };
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.handle} />
 
       <View style={styles.profileHeader}>
-        <View style={styles.avatarOuter}>
+        <TouchableOpacity
+          style={[styles.avatarOuter, { borderColor: profileColor }]}
+          onPress={() => setColorModalVisible(true)}
+          activeOpacity={0.82}
+        >
           <View style={styles.avatarInner}>
             {user?.avatarUrl ? (
               <Image source={{ uri: user.avatarUrl }} style={styles.avatarImage} />
@@ -300,12 +354,12 @@ export default function ProfileScreen() {
               </View>
             )}
           </View>
-        </View>
+        </TouchableOpacity>
 
         <Text style={styles.name}>{displayName}</Text>
         <TouchableOpacity onPress={handleCopyFriendLink} activeOpacity={0.75}>
           <Text style={styles.link}>
-            {friendLink || "Loading friend link..."}
+            {displayFriendLink}
           </Text>
         </TouchableOpacity>
 
@@ -340,6 +394,11 @@ export default function ProfileScreen() {
           icon="👤"
           label="Edit profile photo"
           onPress={handleEditProfilePhoto}
+        />
+        <SettingRow
+          icon="🎨"
+          label="Profile ring colour"
+          onPress={() => setColorModalVisible(true)}
         />
         <SettingRow
           icon="✉️"
@@ -401,6 +460,11 @@ export default function ProfileScreen() {
                 return;
               }
 
+              if (item.label === "Privacy Policy") {
+                setPrivacyVisible(true);
+                return;
+              }
+
               handleComingSoon(item.label);
             }}
           />
@@ -418,6 +482,39 @@ export default function ProfileScreen() {
       </Section>
 
       <Text style={styles.footer}>Mood data stays private by default.</Text>
+
+      <Modal
+        visible={colorModalVisible}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setColorModalVisible(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Profile ring colour</Text>
+            <View style={styles.colorGrid}>
+              {colorOptions.map((color) => (
+                <TouchableOpacity
+                  key={color}
+                  style={[
+                    styles.colorCircle,
+                    { backgroundColor: color },
+                    profileColor === color && styles.colorCircleSelected,
+                  ]}
+                  onPress={() => handleChooseProfileColor(color)}
+                  activeOpacity={0.78}
+                />
+              ))}
+            </View>
+            <TouchableOpacity
+              style={styles.fullCancelButton}
+              onPress={() => setColorModalVisible(false)}
+            >
+              <Text style={styles.cancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       <Modal
         visible={friendsVisible}
@@ -592,6 +689,58 @@ export default function ProfileScreen() {
           </View>
         </View>
       </Modal>
+
+      <Modal
+        visible={privacyVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setPrivacyVisible(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.termsCard}>
+            <Text style={styles.modalTitle}>Privacy Policy</Text>
+            <ScrollView style={styles.termsScroll}>
+              <Text style={styles.termsText}>
+                MoodSnap is built for sharing small, real moments with people you choose.
+                Your profile, mood snaps, friend list, and mood calendar are used to make
+                the app work and to show your content to accepted friends.
+              </Text>
+              <Text style={styles.termsText}>
+                Your snaps are private by default. People who are not your accepted friends
+                cannot see your feed photos through the app. You can add friends through
+                your MoodSnap invite link, and you control who becomes your friend.
+              </Text>
+              <Text style={styles.termsText}>
+                We store account details such as your email, username, profile photo,
+                friend relationships, mood entries, and uploaded image links. Photos are
+                hosted securely through Cloudinary and app data is stored through our
+                backend database services.
+              </Text>
+              <Text style={styles.termsText}>
+                We use your information to sign you in, verify your account, upload and
+                display snaps, calculate streaks, show your calendar, manage friends, and
+                keep the app safe from spam or misuse.
+              </Text>
+              <Text style={styles.termsText}>
+                MoodSnap does not sell your personal information. You should only share
+                photos that you are comfortable showing to your accepted friends.
+              </Text>
+              <Text style={styles.termsText}>
+                You can update your profile name and photo in the app. You can also delete
+                your account from Profile settings, which removes your account data and
+                connected MoodSnap content from the app database where supported.
+              </Text>
+            </ScrollView>
+            <TouchableOpacity
+              style={styles.doneButton}
+              onPress={() => setPrivacyVisible(false)}
+            >
+              <Text style={styles.saveText}>Done</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
     </ScrollView>
   );
 }
@@ -867,6 +1016,23 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     backgroundColor: COLORS.primary,
     alignItems: "center",
+  },
+  colorGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 14,
+    marginTop: 8,
+  },
+  colorCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    borderWidth: 3,
+    borderColor: "transparent",
+  },
+  colorCircleSelected: {
+    borderColor: "#fff",
+    transform: [{ scale: 1.08 }],
   },
   starRow: {
     flexDirection: "row",

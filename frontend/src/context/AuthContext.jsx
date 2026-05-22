@@ -55,6 +55,7 @@ export function AuthProvider({ children }) {
     if (result.user) {
       await saveUser(result.user);
       setUser(result.user);
+      setFeedRefreshKey((current) => current + 1);
       const linkResult = await getFriendLinkApi().catch(() => null);
       setFriendLink(linkResult?.friendLink || "");
     }
@@ -68,6 +69,7 @@ export function AuthProvider({ children }) {
     if (result.user) {
       await saveUser(result.user);
       setUser(result.user);
+      setFeedRefreshKey((current) => current + 1);
     }
 
     return result.user;

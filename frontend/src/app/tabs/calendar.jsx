@@ -1,6 +1,7 @@
 import React, { useContext, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  FlatList,
   Image,
   Modal,
   ScrollView,
@@ -31,6 +32,8 @@ const monthLabels = [
 ];
 
 const weekLabels = ["M", "T", "W", "T", "F", "S", "S"];
+
+const MODAL_IMAGE_WIDTH = 320;
 
 const dateKey = (date) => date.toISOString().slice(0, 10);
 
@@ -200,17 +203,35 @@ export default function CalendarScreen() {
           <View style={styles.modalCard}>
             {selectedEntry && (
               <>
-                <Image
-                  source={{ uri: selectedEntry.imageUrl }}
-                  style={styles.modalImage}
-                  resizeMode="contain"
-                />
                 <Text style={styles.modalTitle}>
-                  {getMoodMeta(selectedEntry.mood).emoji} {selectedEntry.mood}
+                  {selectedEntry.date}
                 </Text>
                 <Text style={styles.modalMeta}>
-                  {selectedEntry.date} · {formatUploadTime(selectedEntry.createdAt)}
+                  Swipe to view all snaps from this day
                 </Text>
+
+                <FlatList
+                  data={selectedEntry.snaps?.length ? selectedEntry.snaps : [selectedEntry]}
+                  keyExtractor={(item) => item.id || item.snapId}
+                  horizontal
+                  pagingEnabled
+                  showsHorizontalScrollIndicator={false}
+                  renderItem={({ item, index }) => (
+                    <View style={styles.snapSlide}>
+                      <Image
+                        source={{ uri: item.imageUrl }}
+                        style={styles.modalImage}
+                        resizeMode="contain"
+                      />
+                      <Text style={styles.modalSnapTitle}>
+                        {getMoodMeta(item.mood).emoji} {item.mood}
+                      </Text>
+                      <Text style={styles.modalMeta}>
+                        {index + 1}/{selectedEntry.snaps?.length || 1} · {formatUploadTime(item.createdAt)}
+                      </Text>
+                    </View>
+                  )}
+                />
               </>
             )}
           </View>
@@ -329,11 +350,15 @@ const styles = StyleSheet.create({
     backgroundColor: "#111",
     borderRadius: 30,
     padding: 14,
+    alignSelf: "center",
+    width: MODAL_IMAGE_WIDTH + 28,
+  },
+  snapSlide: {
+    width: MODAL_IMAGE_WIDTH,
   },
   modalImage: {
-    width: "100%",
+    width: MODAL_IMAGE_WIDTH,
     height: 440,
-    maxHeight: "72%",
     borderRadius: 24,
     backgroundColor: "#050505",
   },
@@ -342,6 +367,12 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: "900",
     marginTop: 16,
+  },
+  modalSnapTitle: {
+    color: "#fff",
+    fontSize: 22,
+    fontWeight: "900",
+    marginTop: 14,
   },
   modalMeta: {
     color: "#aaa",

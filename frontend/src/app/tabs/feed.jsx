@@ -11,7 +11,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { getFeedApi, getSnapsApi } from "../../api/snapApi";
+import { getFeedApi } from "../../api/snapApi";
 import { AuthContext } from "../../context/AuthContext";
 import { COLORS } from "../../constants/colors";
 import { getMoodMeta } from "../../utils/moods";
@@ -46,7 +46,14 @@ function FeedCard({ item, onOpen }) {
     >
       <Image source={{ uri: item.imageUrl }} style={styles.cardImage} />
       <View style={styles.cardScrim} />
-      <Text style={styles.cardTime}>{formatUploadTime(item.createdAt)}</Text>
+      <View style={styles.cardTopText}>
+        <Text style={styles.cardTime}>{formatUploadTime(item.createdAt)}</Text>
+        {!!item.caption && (
+          <Text style={styles.cardCaption} numberOfLines={2}>
+            {item.caption}
+          </Text>
+        )}
+      </View>
 
       <View style={styles.cardFooter}>
         <View style={styles.userRow}>
@@ -90,16 +97,9 @@ export default function FeedScreen() {
       setNextCursor(result.nextCursor || null);
       setError("");
     } catch (loadError) {
-      try {
-        const fallbackResult = await getSnapsApi();
-        setSnaps(fallbackResult.snaps || []);
-        setNextCursor(null);
-        setError("");
-      } catch {
-        setSnaps([]);
-        setNextCursor(null);
-        setError("");
-      }
+      setSnaps([]);
+      setNextCursor(null);
+      setError(loadError.message || "Failed to load feed.");
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -148,6 +148,7 @@ export default function FeedScreen() {
             <Text style={styles.subtitle}>
               See what your close friends are feeling.
             </Text>
+            {!!error && <Text style={styles.errorText}>{error}</Text>}
           </View>
         }
         ListEmptyComponent={
@@ -204,6 +205,12 @@ export default function FeedScreen() {
                   {formatUploadTime(selectedSnap.createdAt)} ·{" "}
                   {getMoodMeta(selectedSnap.mood).emoji} {selectedSnap.mood}
                 </Text>
+                {!!selectedSnap.caption && (
+                  <Text style={styles.modalCaption}>{selectedSnap.caption}</Text>
+                )}
+                {!!selectedSnap.caption && (
+                  <Text style={styles.modalCaption}>{selectedSnap.caption}</Text>
+                )}
               </>
             )}
           </View>
@@ -265,6 +272,24 @@ const styles = StyleSheet.create({
     width: "100%",
     height: "100%",
     resizeMode: "cover",
+  },
+  cardTopText: {
+    position: "absolute",
+    top: 28,
+    left: 20,
+    right: 20,
+    alignItems: "center",
+    zIndex: 2,
+  },
+  cardCaption: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "900",
+    textAlign: "center",
+    marginTop: 6,
+    textShadowColor: "rgba(0,0,0,0.65)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 6,
   },
   cardScrim: {
     ...StyleSheet.absoluteFillObject,
@@ -382,6 +407,13 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: "900",
     marginTop: 16,
+  },
+  modalCaption: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "800",
+    lineHeight: 22,
+    marginTop: 10,
   },
   modalMeta: {
     color: "#aaa",

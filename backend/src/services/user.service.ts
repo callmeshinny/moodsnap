@@ -8,6 +8,7 @@ export type UserRecord = {
   email: string;
   avatar_url?: string | null;
   avatar_public_id?: string | null;
+  profile_color?: string | null;
   timezone?: string | null;
   calendar_mode?: string | null;
   is_verified?: boolean;
@@ -27,6 +28,7 @@ export const mapUser = (user: UserRecord) => ({
   email: user.email,
   avatarUrl: user.avatar_url || null,
   avatarPublicId: user.avatar_public_id || null,
+  profileColor: user.profile_color || "#F65078",
   timezone: user.timezone || null,
   calendarMode: user.calendar_mode || null,
   isVerified: Boolean(user.is_verified),
@@ -37,7 +39,7 @@ export const mapUser = (user: UserRecord) => ({
 export const getUserById = async (userId: string) => {
   const { data: user, error } = await supabase
     .from("users")
-    .select("id, username, email, avatar_url, avatar_public_id, timezone, calendar_mode, is_verified, created_at, updated_at")
+    .select("id, username, email, avatar_url, avatar_public_id, profile_color, timezone, calendar_mode, is_verified, created_at, updated_at")
     .eq("id", userId)
     .single();
 
@@ -51,7 +53,7 @@ export const getUserById = async (userId: string) => {
 export const getUserByUsername = async (username: string) => {
   const { data: user, error } = await supabase
     .from("users")
-    .select("id, username, email, avatar_url, avatar_public_id, timezone, calendar_mode, is_verified, created_at, updated_at")
+    .select("id, username, email, avatar_url, avatar_public_id, profile_color, timezone, calendar_mode, is_verified, created_at, updated_at")
     .eq("username", username)
     .maybeSingle();
 
@@ -64,24 +66,52 @@ export const getUserByUsername = async (username: string) => {
 
 export const updateUserProfile = async (
   userId: string,
-  input: { username?: unknown }
+  input: { username?: unknown; profileColor?: unknown }
 ) => {
-  if (typeof input.username !== "string") {
-    throw new Error("Username is required");
+  const updates: Record<string, string> = {
+    updated_at: new Date().toISOString(),
+  };
+
+  if (typeof input.username === "string") {
+    updates.username = input.username;
   }
 
-  const { data: user, error } = await supabase
+  if (typeof input.profileColor === "string") {
+    updates.profile_color = input.profileColor;
+  }
+
+  if (!updates.username && !updates.profile_color) {
+    throw new Error("Nothing to update");
+  }
+
+  let { data: user, error } = await supabase
     .from("users")
-    .update({
-      username: input.username,
-      updated_at: new Date().toISOString(),
-    })
+    .update(updates)
     .eq("id", userId)
-    .select("id, username, email, avatar_url, avatar_public_id, timezone, calendar_mode, is_verified, created_at, updated_at")
+    .select("id, username, email, avatar_url, avatar_public_id, profile_color, timezone, calendar_mode, is_verified, created_at, updated_at")
     .single();
+
+  if (error && error.message?.includes("profile_color")) {
+    const fallbackUpdates = { ...updates };
+    delete fallbackUpdates.profile_color;
+
+    const fallback = await supabase
+      .from("users")
+      .update(fallbackUpdates)
+      .eq("id", userId)
+      .select("id, username, email, avatar_url, avatar_public_id, timezone, calendar_mode, is_verified, created_at, updated_at")
+      .single();
+
+    user = fallback.data as any;
+    error = fallback.error as any;
+  }
 
   if (error) {
     throw new Error(error.message);
+  }
+
+  if (!user) {
+    throw new Error("Failed to update profile");
   }
 
   return mapUser(user);
@@ -96,7 +126,7 @@ export const getUsersByIds = async (userIds: string[]) => {
 
   const { data: users, error } = await supabase
     .from("users")
-    .select("id, username, email, avatar_url, avatar_public_id, timezone, calendar_mode, is_verified, created_at, updated_at")
+    .select("id, username, email, avatar_url, avatar_public_id, profile_color, timezone, calendar_mode, is_verified, created_at, updated_at")
     .in("id", uniqueIds);
 
   if (error) {
@@ -130,7 +160,7 @@ export const updateUserProfilePhoto = async (
       updated_at: new Date().toISOString(),
     })
     .eq("id", userId)
-    .select("id, username, email, avatar_url, avatar_public_id, timezone, calendar_mode, is_verified, created_at, updated_at")
+    .select("id, username, email, avatar_url, avatar_public_id, profile_color, timezone, calendar_mode, is_verified, created_at, updated_at")
     .single();
 
   if (error && error.message?.includes("avatar_public_id")) {
@@ -141,7 +171,7 @@ export const updateUserProfilePhoto = async (
         updated_at: new Date().toISOString(),
       })
       .eq("id", userId)
-      .select("id, username, email, avatar_url, timezone, calendar_mode, is_verified, created_at, updated_at")
+      .select("id, username, email, avatar_url, profile_color, timezone, calendar_mode, is_verified, created_at, updated_at")
       .single();
 
     user = fallback.data as any;

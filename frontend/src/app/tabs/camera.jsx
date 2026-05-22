@@ -5,6 +5,7 @@ import {
   Image,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -21,6 +22,7 @@ export default function CameraScreen() {
   const [hasCaptured, setHasCaptured] = useState(false);
   const [capturedImageUri, setCapturedImageUri] = useState(null);
   const [selectedMood, setSelectedMood] = useState(null);
+  const [caption, setCaption] = useState("");
   const [posting, setPosting] = useState(false);
   const [cameraFacing, setCameraFacing] = useState("back");
 
@@ -54,6 +56,8 @@ export default function CameraScreen() {
       setCapturedImageUri(photo.uri);
       setHasCaptured(true);
       setSelectedMood(null);
+      setCaption("");
+      setCaption("");
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Could not capture photo";
@@ -66,6 +70,8 @@ export default function CameraScreen() {
     setHasCaptured(false);
     setCapturedImageUri(null);
     setSelectedMood(null);
+    setCaption("");
+    setCaption("");
   };
 
   const handlePost = async () => {
@@ -85,6 +91,7 @@ export default function CameraScreen() {
       await createSnapApi({
         imageUri: capturedImageUri,
         mood: selectedMood.label,
+        caption: caption.trim(),
       });
 
       Alert.alert(
@@ -97,6 +104,7 @@ export default function CameraScreen() {
       setHasCaptured(false);
       setCapturedImageUri(null);
       setSelectedMood(null);
+      setCaption("");
     } catch (error) {
       Alert.alert(
         "Post failed",
@@ -173,6 +181,18 @@ export default function CameraScreen() {
                 </Text>
               </View>
             )}
+
+            <View style={styles.captionOverlay}>
+              <TextInput
+                style={styles.captionInput}
+                value={caption}
+                onChangeText={setCaption}
+                placeholder="Add a note..."
+                placeholderTextColor="#cfcfcf"
+                maxLength={160}
+                multiline
+              />
+            </View>
           </>
         )}
       </View>
@@ -343,6 +363,41 @@ const styles = StyleSheet.create({
   },
   moodEmoji: {
     fontSize: 25,
+  },
+  captionInput: {
+    minHeight: 52,
+    maxHeight: 100,
+    borderRadius: 18,
+    backgroundColor: "#151515",
+    borderWidth: 1,
+    borderColor: "#2b2b2b",
+    color: "#fff",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 15,
+    fontWeight: "800",
+    marginTop: 16,
+    marginBottom: 14,
+  },
+  captionOverlay: {
+    position: "absolute",
+    left: 18,
+    right: 18,
+    bottom: 18,
+    zIndex: 4,
+  },
+  captionInput: {
+    minHeight: 46,
+    maxHeight: 92,
+    borderRadius: 18,
+    backgroundColor: "rgba(0,0,0,0.58)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.18)",
+    color: "#fff",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 15,
+    fontWeight: "800",
   },
   actionRow: {
     flexDirection: "row",
