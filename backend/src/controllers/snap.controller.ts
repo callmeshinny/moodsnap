@@ -11,7 +11,7 @@ const mapSnap = (snap: any, user: any = null) => ({
   mood: snap.mood,
   caption: snap.caption,
   imageUrl: snap.image_url,
-  imagePublicId: snap.image_public_id,
+  imagePublicId: snap.cloudinary_public_id || snap.image_public_id,
   createdAt: snap.created_at,
   user,
 });
@@ -55,6 +55,8 @@ export const createSnap = async (req: Request, res: Response): Promise<void> => 
         caption: caption || null,
         image_url: uploadedImage.secure_url,
         image_public_id: uploadedImage.public_id,
+        cloudinary_public_id: uploadedImage.public_id,
+        created_at: new Date().toISOString(),
       })
       .select()
       .single();

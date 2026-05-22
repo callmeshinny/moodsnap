@@ -11,7 +11,7 @@ type CloudinaryUploadResult = {
 
 export const uploadImageToCloudinary = async (
   fileBuffer: Buffer,
-  folder = "moodsnap"
+  folder = "moodsnap/snaps"
 ): Promise<CloudinaryUploadResult> => {
   return new Promise((resolve, reject) => {
     const stream = cloudinary.uploader.upload_stream(

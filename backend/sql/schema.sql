@@ -29,12 +29,16 @@ create table if not exists public.moodsnap (
   caption text,
   image_url text not null,
   image_public_id text not null,
+  cloudinary_public_id text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
 alter table public.moodsnap
   add column if not exists updated_at timestamptz not null default now();
+
+alter table public.moodsnap
+  add column if not exists cloudinary_public_id text;
 
 create table if not exists public.friendships (
   id uuid primary key default gen_random_uuid(),
