@@ -21,15 +21,18 @@ const { height } = Dimensions.get("window");
 const CARD_HEIGHT = Math.round(height * 0.33);
 
 function Avatar({ user }) {
-  if (user?.avatarUrl) {
-    return <Image source={{ uri: user.avatarUrl }} style={styles.avatar} />;
-  }
-
+  const ringColor = user?.profileColor || COLORS.primary;
   const initial = user?.username?.[0]?.toUpperCase() || "?";
 
   return (
-    <View style={styles.avatarFallback}>
-      <Text style={styles.avatarInitial}>{initial}</Text>
+    <View style={[styles.avatarRing, { borderColor: ringColor }]}>
+      {user?.avatarUrl ? (
+        <Image source={{ uri: user.avatarUrl }} style={styles.avatar} />
+      ) : (
+        <View style={styles.avatarFallback}>
+          <Text style={styles.avatarInitial}>{initial}</Text>
+        </View>
+      )}
     </View>
   );
 }
@@ -40,7 +43,7 @@ function FeedCard({ item, onOpen }) {
 
   return (
     <TouchableOpacity
-      style={styles.card}
+      style={[styles.card, { aspectRatio: item.aspectRatio || 3 / 4 }]}
       onPress={() => onOpen(item)}
       activeOpacity={0.9}
     >
@@ -144,10 +147,6 @@ export default function FeedScreen() {
         ListHeaderComponent={
           <View style={styles.header}>
             <Text style={styles.logo}>MoodSnap</Text>
-            <Text style={styles.title}>Friends' moments</Text>
-            <Text style={styles.subtitle}>
-              See what your close friends are feeling.
-            </Text>
             {!!error && <Text style={styles.errorText}>{error}</Text>}
           </View>
         }
@@ -191,6 +190,14 @@ export default function FeedScreen() {
             onPress={() => setSelectedSnap(null)}
           />
           <View style={styles.modalCard}>
+            <TouchableOpacity
+              style={styles.modalCloseButton}
+              onPress={() => setSelectedSnap(null)}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.modalCloseText}>×</Text>
+            </TouchableOpacity>
+
             {selectedSnap && (
               <>
                 <Image
@@ -205,9 +212,6 @@ export default function FeedScreen() {
                   {formatUploadTime(selectedSnap.createdAt)} ·{" "}
                   {getMoodMeta(selectedSnap.mood).emoji} {selectedSnap.mood}
                 </Text>
-                {!!selectedSnap.caption && (
-                  <Text style={styles.modalCaption}>{selectedSnap.caption}</Text>
-                )}
                 {!!selectedSnap.caption && (
                   <Text style={styles.modalCaption}>{selectedSnap.caption}</Text>
                 )}
@@ -261,7 +265,7 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   card: {
-    height: CARD_HEIGHT,
+    width: "100%",
     borderRadius: 30,
     overflow: "hidden",
     backgroundColor: "#161616",
@@ -320,16 +324,25 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
   },
+  avatarRing: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    borderWidth: 3,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0,0,0,0.25)",
+  },
   avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     backgroundColor: "#333",
   },
   avatarFallback: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     backgroundColor: COLORS.primary,
     justifyContent: "center",
     alignItems: "center",
@@ -395,6 +408,24 @@ const styles = StyleSheet.create({
     borderRadius: 30,
     backgroundColor: "#111",
     padding: 14,
+  },
+  modalCloseButton: {
+    position: "absolute",
+    top: 22,
+    right: 22,
+    zIndex: 10,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: "rgba(0,0,0,0.62)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalCloseText: {
+    color: "#fff",
+    fontSize: 28,
+    fontWeight: "900",
+    marginTop: -3,
   },
   modalImage: {
     width: "100%",

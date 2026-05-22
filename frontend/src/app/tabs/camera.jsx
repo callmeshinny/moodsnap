@@ -3,10 +3,12 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  Keyboard,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   View,
 } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
@@ -56,7 +58,6 @@ export default function CameraScreen() {
       setCapturedImageUri(photo.uri);
       setHasCaptured(true);
       setSelectedMood(null);
-      setCaption("");
       setCaption("");
     } catch (error) {
       const message =
@@ -135,7 +136,8 @@ export default function CameraScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+      <View style={styles.container}>
       <View
         style={[
           styles.preview,
@@ -172,7 +174,7 @@ export default function CameraScreen() {
             {selectedMood && (
               <View
                 style={[
-                  styles.moodBadge,
+                  styles.selectedMoodTopBadge,
                   { backgroundColor: selectedMood.color },
                 ]}
               >
@@ -244,7 +246,8 @@ export default function CameraScreen() {
           </View>
         </>
       )}
-    </View>
+      </View>
+    </TouchableWithoutFeedback>
   );
 }
 
@@ -310,6 +313,15 @@ const styles = StyleSheet.create({
     fontSize: 30,
     fontWeight: "900",
     lineHeight: 32,
+  },
+  selectedMoodTopBadge: {
+    position: "absolute",
+    top: 78,
+    alignSelf: "center",
+    borderRadius: 999,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    zIndex: 4,
   },
   moodBadge: {
     position: "absolute",

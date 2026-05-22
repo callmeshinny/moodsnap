@@ -4,6 +4,7 @@ import {
   getAcceptedFriends,
   getFriendCount,
   getFriendLink,
+  getFriendStatus,
   getPendingFriendRequests,
   rejectFriendRequest,
   sendFriendRequest,
@@ -104,6 +105,29 @@ export const rejectRequest = async (
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Failed to update friend request";
+
+    res.status(400).json({ success: false, message });
+  }
+};
+
+
+export const checkFriendStatus = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const userId = requireUserId(req, res);
+    if (!userId) return;
+
+    const result = await getFriendStatus(userId, req.params.receiverId);
+
+    res.status(200).json({
+      success: true,
+      ...result,
+    });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to check friend status";
 
     res.status(400).json({ success: false, message });
   }

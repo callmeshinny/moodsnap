@@ -102,26 +102,16 @@ export default function ProfileScreen() {
     ]);
   };
 
-  const getInviteMessage = (link) =>
-    `Add me on MoodSnap: ${link}`;
+  const getInviteMessage = () =>
+    `Add me on MoodSnap: ${displayFriendLink}\n${realFriendLink}`;
 
   const getFriendLink = async () => {
-    try {
-      const link = friendLink || (await refreshFriendLink?.());
-
-      if (!link) {
-        Alert.alert("Friend link unavailable", "Please try again in a moment.");
-        return null;
-      }
-
-      return link;
-    } catch (error) {
-      Alert.alert(
-        "Friend link unavailable",
-        error.response?.data?.message || error.message || "Please try again in a moment."
-      );
+    if (!realFriendLink) {
+      Alert.alert("Friend link unavailable", "Please try again in a moment.");
       return null;
     }
+
+    return realFriendLink;
   };
 
   const handleCopyFriendLink = async () => {
@@ -132,7 +122,7 @@ export default function ProfileScreen() {
     }
 
     try {
-      await Clipboard.setStringAsync(getInviteMessage(link));
+      await Clipboard.setStringAsync(getInviteMessage());
       Alert.alert("Copied", "Your MoodSnap invite URL is ready to paste.");
     } catch {
       Alert.alert("Copy failed", "Please try again.");
@@ -148,7 +138,7 @@ export default function ProfileScreen() {
 
     try {
       await Share.share({
-        message: getInviteMessage(link),
+        message: getInviteMessage(),
         url: link,
         title: "Add me on MoodSnap",
       });
@@ -304,6 +294,9 @@ export default function ProfileScreen() {
   const displayFriendLink = user?.username
     ? `moodsnap.cam/${encodeURIComponent(user.username)}`
     : "Loading share URL...";
+  const realFriendLink = user?.username
+    ? `https://moodsnap-92ps.onrender.com/friend/${encodeURIComponent(user.username)}`
+    : "";
   const profileColor = user?.profileColor || COLORS.primary;
 
   const colorOptions = [

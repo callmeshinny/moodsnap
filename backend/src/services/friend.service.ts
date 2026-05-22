@@ -243,6 +243,55 @@ export const areAcceptedFriends = async (
   return Boolean(data);
 };
 
+
+export const getFriendStatus = async (
+  currentUserId: string,
+  receiverId: unknown
+) => {
+  if (typeof receiverId !== "string" || !receiverId.trim()) {
+    throw new Error("Receiver id is required");
+  }
+
+  const receiverIdentifier = receiverId.trim();
+  const receiver =
+    (await getUserByUsername(receiverIdentifier)) ||
+    (await getUserById(receiverIdentifier).catch(() => null));
+
+  if (!receiver) {
+    throw new Error("User not found");
+  }
+
+  if (currentUserId === receiver.id) {
+    return {
+      targetUser: receiver,
+      status: "self",
+      alreadyFriends: false,
+      pending: false,
+    };
+  }
+
+  const [userOneId, userTwoId] = orderedPair(currentUserId, receiver.id);
+
+  const { data: friendship, error } = await supabase
+    .from("friendships")
+    .select("*")
+    .eq("user_one_id", userOneId)
+    .eq("user_two_id", userTwoId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return {
+    targetUser: receiver,
+    status: friendship?.status || "none",
+    alreadyFriends: friendship?.status === "accepted",
+    pending: friendship?.status === "pending",
+    friendship: friendship ? mapFriendship(friendship) : null,
+  };
+};
+
 export const getFriendCount = async (userId: string) => {
   const { count, error } = await supabase
     .from("friendships")

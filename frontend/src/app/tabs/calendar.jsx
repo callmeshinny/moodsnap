@@ -169,7 +169,7 @@ export default function CalendarScreen() {
     <View style={styles.container}>
       <ScrollView style={styles.container} contentContainerStyle={styles.content}>
         <View style={styles.header}>
-          <Text style={styles.title}>Mood calendar</Text>
+          <Text style={styles.title}>Calendar</Text>
           <View style={styles.streakBadge}>
             <Text style={styles.streakText}>🔥 {streak || 0} day streak</Text>
           </View>

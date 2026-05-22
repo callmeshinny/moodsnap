@@ -34,3 +34,12 @@ export const rejectFriendRequestApi = async (requestId) => {
   const response = await apiClient.post("/friends/reject", { requestId });
   return response.data;
 };
+
+
+export const checkFriendStatusApi = async (receiverId) => {
+  const response = await apiClient.get(
+    `/friends/status/${encodeURIComponent(receiverId)}`
+  );
+  return response.data;
+};
+

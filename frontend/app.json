@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "frontend",
-    "slug": "frontend",
+    "name": "MoodSnap",
+    "slug": "moodsnap",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "frontend",
+    "scheme": "moodsnap",
     "userInterfaceStyle": "automatic",
     "ios": {
       "icon": "./assets/expo.icon",

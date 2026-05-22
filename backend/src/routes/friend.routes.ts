@@ -1,6 +1,7 @@
 import { Router } from "express";
 import {
   acceptRequest,
+  checkFriendStatus,
   countFriends,
   createFriendRequest,
   getMyFriendLink,
@@ -16,6 +17,7 @@ router.use(authMiddleware);
 
 router.get("/link", getMyFriendLink);
 router.get("/count", countFriends);
+router.get("/status/:receiverId", checkFriendStatus);
 router.get("/", listFriends);
 router.get("/requests", listPendingRequests);
 router.post("/request", createFriendRequest);
