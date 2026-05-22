@@ -39,9 +39,6 @@ export default function CameraScreen() {
   const [friendModalVisible, setFriendModalVisible] = useState(false);
   const [friendLinkInput, setFriendLinkInput] = useState("");
   const [sendingFriendRequest, setSendingFriendRequest] = useState(false);
-  const [friendModalVisible, setFriendModalVisible] = useState(false);
-  const [friendLinkInput, setFriendLinkInput] = useState("");
-  const [sendingFriendRequest, setSendingFriendRequest] = useState(false);
 
   const handleFlipCamera = () => {
     setCameraFacing((current) => (current === "back" ? "front" : "back"));

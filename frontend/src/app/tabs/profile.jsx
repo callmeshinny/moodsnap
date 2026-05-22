@@ -388,6 +388,15 @@ export default function ProfileScreen() {
     "#FFFFFF",
   ];
 
+
+  const withAlpha = (hex, alpha = "22") => {
+    if (typeof hex !== "string" || !hex.startsWith("#") || hex.length !== 7) {
+      return "rgba(246,80,120,0.14)";
+    }
+
+    return `${hex}${alpha}`;
+  };
+
   const handleChooseProfileColor = async (color) => {
     try {
       setColorModalVisible(false);
@@ -429,7 +438,16 @@ export default function ProfileScreen() {
 
         <Text style={styles.name}>{displayName}</Text>
         <TouchableOpacity onPress={handleOpenFriendLink} activeOpacity={0.75}>
-          <Text style={styles.link}>
+          <Text
+            style={[
+              styles.link,
+              {
+                color: profileColor,
+                borderColor: profileColor,
+                backgroundColor: withAlpha(profileColor, "22"),
+              },
+            ]}
+          >
             {displayFriendLink}
           </Text>
         </TouchableOpacity>
@@ -917,6 +935,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 7,
     borderRadius: 999,
+    borderWidth: 1.5,
+    borderColor: COLORS.primary,
     overflow: "hidden",
   },
   quickRow: {
