@@ -1,8 +1,20 @@
 import { Request, Response } from "express";
 import { uploadImageToCloudinary } from "../services/upload.service";
 import { supabase } from "../config/supabase";
+import { getUsersByIds } from "../services/user.service";
 
 const TABLE_NAME = "moodsnap";
+
+const mapSnap = (snap: any, user: any = null) => ({
+  id: snap.id,
+  userId: snap.user_id,
+  mood: snap.mood,
+  caption: snap.caption,
+  imageUrl: snap.image_url,
+  imagePublicId: snap.image_public_id,
+  createdAt: snap.created_at,
+  user,
+});
 
 export const createSnap = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -54,7 +66,7 @@ export const createSnap = async (req: Request, res: Response): Promise<void> => 
     res.status(201).json({
       success: true,
       message: "Snap uploaded to Cloudinary and saved to Supabase successfully",
-      snap,
+      snap: mapSnap(snap),
     });
   } catch (error) {
     const message =
@@ -81,11 +93,65 @@ export const getSnaps = async (_req: Request, res: Response): Promise<void> => {
 
     res.status(200).json({
       success: true,
-      snaps,
+      snaps: (snaps || []).map((snap) => mapSnap(snap)),
     });
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Failed to get snaps";
+
+    res.status(500).json({
+      success: false,
+      message,
+    });
+  }
+};
+
+export const getFeed = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const limitParam = Number(req.query.limit || 20);
+    const limit = Number.isFinite(limitParam)
+      ? Math.min(Math.max(limitParam, 1), 50)
+      : 20;
+    const cursor =
+      typeof req.query.cursor === "string" && req.query.cursor.trim()
+        ? req.query.cursor.trim()
+        : null;
+
+    let query = supabase
+      .from(TABLE_NAME)
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(limit + 1);
+
+    if (cursor) {
+      query = query.lt("created_at", cursor);
+    }
+
+    const { data: snaps, error } = await query;
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    const rows = snaps || [];
+    const pageRows = rows.slice(0, limit);
+    const usersById = await getUsersByIds(
+      pageRows.map((snap) => String(snap.user_id))
+    );
+    const feed = pageRows.map((snap) =>
+      mapSnap(snap, usersById.get(String(snap.user_id)) || null)
+    );
+    const nextCursor =
+      rows.length > limit ? pageRows[pageRows.length - 1]?.created_at : null;
+
+    res.status(200).json({
+      success: true,
+      snaps: feed,
+      nextCursor,
+    });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to get feed";
 
     res.status(500).json({
       success: false,

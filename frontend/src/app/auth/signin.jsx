@@ -18,8 +18,8 @@ import { COLORS } from "../../constants/colors";
 export default function SignInScreen() {
   const { login } = useContext(AuthContext);
 
-  const [email, setEmail] = useState("nngoc@gmail.com");
-  const [password, setPassword] = useState("123456");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
 
   const [loading, setLoading] = useState(false);
 

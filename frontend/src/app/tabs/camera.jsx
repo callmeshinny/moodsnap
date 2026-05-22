@@ -1,43 +1,124 @@
-import React, { useState } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, Alert } from "react-native";
+import React, { useContext, useRef, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  Image,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { CameraView, useCameraPermissions } from "expo-camera";
+import { createSnapApi } from "../../api/snapApi";
+import { AuthContext } from "../../context/AuthContext";
 import { COLORS } from "../../constants/colors";
-
-const moods = [
-  { label: "Happy", emoji: "😊", color: "#FFD166" },
-  { label: "Calm", emoji: "😌", color: "#80ED99" },
-  { label: "Sad", emoji: "😢", color: "#74C0FC" },
-  { label: "Angry", emoji: "😡", color: "#FF6B6B" },
-  { label: "Tired", emoji: "😴", color: "#B197FC" },
-];
+import { moodOptions } from "../../utils/moods";
 
 export default function CameraScreen() {
+  const { refreshFeed, refreshStreak, streak } = useContext(AuthContext);
+  const cameraRef = useRef(null);
+  const [permission, requestPermission] = useCameraPermissions();
   const [hasCaptured, setHasCaptured] = useState(false);
+  const [capturedImageUri, setCapturedImageUri] = useState(null);
   const [selectedMood, setSelectedMood] = useState(null);
+  const [posting, setPosting] = useState(false);
 
-  const handleCapture = () => {
-    setHasCaptured(true);
-    setSelectedMood(null);
+  const handleCapture = async () => {
+    try {
+      if (!permission?.granted) {
+        const result = await requestPermission();
+
+        if (!result.granted) {
+          Alert.alert(
+            "Camera permission required",
+            "Please allow camera access to take a snap."
+          );
+          return;
+        }
+      }
+
+      const photo = await cameraRef.current?.takePictureAsync({
+        quality: 0.85,
+      });
+
+      if (!photo?.uri) {
+        throw new Error("Could not capture photo");
+      }
+
+      setCapturedImageUri(photo.uri);
+      setHasCaptured(true);
+      setSelectedMood(null);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Could not capture photo";
+
+      Alert.alert("Camera error", message);
+    }
   };
 
   const handleRetake = () => {
     setHasCaptured(false);
+    setCapturedImageUri(null);
     setSelectedMood(null);
   };
 
-  const handlePost = () => {
+  const handlePost = async () => {
     if (!selectedMood) {
       Alert.alert("Choose your mood", "Pick a mood before posting your snap.");
       return;
     }
 
-    Alert.alert(
-      "MoodSnap posted",
-      `Your snap was saved with mood: ${selectedMood.emoji} ${selectedMood.label}`
-    );
+    if (!capturedImageUri) {
+      Alert.alert("No snap", "Take a snap before posting.");
+      return;
+    }
 
-    setHasCaptured(false);
-    setSelectedMood(null);
+    try {
+      setPosting(true);
+
+      await createSnapApi({
+        imageUri: capturedImageUri,
+        mood: selectedMood.label,
+      });
+
+      Alert.alert(
+        "MoodSnap posted",
+        `Your snap was saved with mood: ${selectedMood.emoji} ${selectedMood.label}`
+      );
+
+      refreshFeed?.();
+      await refreshStreak?.();
+      setHasCaptured(false);
+      setCapturedImageUri(null);
+      setSelectedMood(null);
+    } catch (error) {
+      Alert.alert(
+        "Post failed",
+        error instanceof Error ? error.message : "Could not post your snap."
+      );
+    } finally {
+      setPosting(false);
+    }
   };
+
+  if (!permission) {
+    return (
+      <View style={styles.permissionContainer}>
+        <ActivityIndicator color="#fff" />
+      </View>
+    );
+  }
+
+  if (!permission.granted) {
+    return (
+      <View style={styles.permissionContainer}>
+        <Text style={styles.permissionTitle}>Camera access is needed</Text>
+        <TouchableOpacity style={styles.permissionButton} onPress={requestPermission}>
+          <Text style={styles.permissionButtonText}>Allow Camera</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -47,21 +128,18 @@ export default function CameraScreen() {
           hasCaptured && selectedMood && { borderColor: selectedMood.color },
         ]}
       >
-        <Text style={styles.logo}>MoodSnap</Text>
+        <View style={styles.logoRow}>
+          <Text style={styles.logo}>MoodSnap</Text>
+          <View style={styles.streakBadge}>
+            <Text style={styles.streakText}>🔥 {streak || 0}</Text>
+          </View>
+        </View>
 
-        {!hasCaptured ? (
-          <>
-            <Text style={styles.previewTitle}>Camera preview</Text>
-            <Text style={styles.previewSubtitle}>
-              Mock mode for Simulator testing
-            </Text>
-          </>
+        {!hasCaptured || !capturedImageUri ? (
+          <CameraView ref={cameraRef} style={styles.camera} facing="back" />
         ) : (
           <>
-            <View style={styles.fakePhoto}>
-              <Text style={styles.fakePhotoEmoji}>📸</Text>
-              <Text style={styles.fakePhotoText}>Captured moment</Text>
-            </View>
+            <Image source={{ uri: capturedImageUri }} style={styles.camera} />
 
             {selectedMood && (
               <View
@@ -92,7 +170,7 @@ export default function CameraScreen() {
           <Text style={styles.sectionTitle}>How are you feeling?</Text>
 
           <View style={styles.moodRow}>
-            {moods.map((mood) => (
+            {moodOptions.map((mood) => (
               <TouchableOpacity
                 key={mood.label}
                 style={[
@@ -114,8 +192,14 @@ export default function CameraScreen() {
               <Text style={styles.secondaryText}>Retake</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.postButton} onPress={handlePost}>
-              <Text style={styles.postText}>Post Snap</Text>
+            <TouchableOpacity
+              style={[styles.postButton, posting && styles.disabledButton]}
+              onPress={handlePost}
+              disabled={posting}
+            >
+              <Text style={styles.postText}>
+                {posting ? "Posting..." : "Post Snap"}
+              </Text>
             </TouchableOpacity>
           </View>
         </>
@@ -139,43 +223,35 @@ const styles = StyleSheet.create({
     backgroundColor: "#151515",
     justifyContent: "center",
     alignItems: "center",
-    padding: 24,
     overflow: "hidden",
   },
-  logo: {
+  camera: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  logoRow: {
     position: "absolute",
     top: 28,
     left: 24,
+    right: 24,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    zIndex: 2,
+  },
+  logo: {
     color: COLORS?.primary || "#D6509A",
     fontSize: 28,
     fontWeight: "900",
   },
-  previewTitle: {
+  streakBadge: {
+    backgroundColor: "rgba(0,0,0,0.56)",
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  streakText: {
     color: "#fff",
-    fontSize: 32,
     fontWeight: "900",
-    marginBottom: 10,
-  },
-  previewSubtitle: {
-    color: "#888",
-    fontSize: 15,
-  },
-  fakePhoto: {
-    width: "100%",
-    height: "72%",
-    borderRadius: 28,
-    backgroundColor: "#222",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  fakePhotoEmoji: {
-    fontSize: 58,
-    marginBottom: 12,
-  },
-  fakePhotoText: {
-    color: "#fff",
-    fontSize: 24,
-    fontWeight: "800",
   },
   moodBadge: {
     position: "absolute",
@@ -254,6 +330,9 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS?.primary || "#D6509A",
     alignItems: "center",
   },
+  disabledButton: {
+    opacity: 0.6,
+  },
   postText: {
     color: "#fff",
     fontSize: 16,
@@ -264,5 +343,30 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: 16,
     fontSize: 13,
+  },
+  permissionContainer: {
+    flex: 1,
+    backgroundColor: "#000",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
+  },
+  permissionTitle: {
+    color: "#fff",
+    fontSize: 22,
+    fontWeight: "800",
+    marginBottom: 20,
+    textAlign: "center",
+  },
+  permissionButton: {
+    backgroundColor: COLORS?.primary || "#D6509A",
+    borderRadius: 18,
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+  },
+  permissionButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "900",
   },
 });

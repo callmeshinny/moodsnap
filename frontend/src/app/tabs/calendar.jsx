@@ -1,138 +1,176 @@
-import React, { useState } from "react";
-import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
+import React, { useContext, useEffect, useMemo, useState } from "react";
+import {
+  ActivityIndicator,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
+import { getMoodCalendarApi } from "../../api/moodApi";
+import { AuthContext } from "../../context/AuthContext";
 import { COLORS } from "../../constants/colors";
+import { getMoodMeta } from "../../utils/moods";
 
 const monthLabels = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December"
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
 ];
 
-const moodByDate = {
-  2: { emoji: "😊", color: "#FFD166" },
-  5: { emoji: "😌", color: "#80ED99" },
-  8: { emoji: "😢", color: "#74C0FC" },
-  12: { emoji: "😊", color: "#FFD166" },
-  16: { emoji: "😡", color: "#FF6B6B" },
-  21: { emoji: "📅", color: "#FFD60A", selected: true },
-  25: { emoji: "😴", color: "#B197FC" },
-  29: { emoji: "😊", color: "#FFD166" },
+const weekLabels = ["M", "T", "W", "T", "F", "S", "S"];
+
+const dateKey = (date) => date.toISOString().slice(0, 10);
+
+const buildMonths = (startedAt) => {
+  const now = new Date();
+  const start = startedAt ? new Date(startedAt) : now;
+  const cursor = new Date(start.getFullYear(), start.getMonth(), 1);
+  const end = new Date(now.getFullYear(), now.getMonth(), 1);
+  const months = [];
+
+  while (cursor <= end) {
+    months.push({
+      month: cursor.getMonth(),
+      year: cursor.getFullYear(),
+    });
+    cursor.setMonth(cursor.getMonth() + 1);
+  }
+
+  return months;
 };
 
-export default function CalendarScreen() {
-  const [month, setMonth] = useState(4);
-  const [year, setYear] = useState(2026);
-
+function MonthGrid({ month, year, entriesByDate }) {
+  const todayKey = dateKey(new Date());
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const firstDay = new Date(year, month, 1).getDay();
   const mondayFirstOffset = firstDay === 0 ? 6 : firstDay - 1;
-
   const cells = [
     ...Array.from({ length: mondayFirstOffset }, () => null),
     ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
   ];
 
-  const goPrevious = () => {
-    if (month === 0) {
-      setMonth(11);
-      setYear(year - 1);
-    } else {
-      setMonth(month - 1);
-    }
-  };
-
-  const goNext = () => {
-    if (month === 11) {
-      setMonth(0);
-      setYear(year + 1);
-    } else {
-      setMonth(month + 1);
-    }
-  };
-
-  const streakCount = Object.keys(moodByDate).length;
-
   return (
-    <View style={styles.container}>
-      <View style={styles.card}>
-        <View style={styles.headerRow}>
-          <View>
-            <Text style={styles.title}>
-              {monthLabels[month]} {year}
-            </Text>
-            <Text style={styles.subtitle}>Mood check-in calendar</Text>
-          </View>
+    <View style={styles.monthCard}>
+      <Text style={styles.monthTitle}>
+        {monthLabels[month]} {year}
+      </Text>
 
-          <View style={styles.navRow}>
-            <TouchableOpacity style={styles.navButton} onPress={goPrevious}>
-              <Text style={styles.navText}>‹</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.navButton} onPress={goNext}>
-              <Text style={styles.navText}>›</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        <View style={styles.weekRow}>
-          {["M", "T", "W", "T", "F", "S", "S"].map((day, index) => (
-            <Text key={`${day}-${index}`} style={styles.weekText}>
-              {day}
-            </Text>
-          ))}
-        </View>
-
-        <View style={styles.grid}>
-          {cells.map((day, index) => {
-            if (!day) {
-              return <View key={`empty-${index}`} style={styles.dayCell} />;
-            }
-
-            const mood = moodByDate[day];
-
-            return (
-              <TouchableOpacity
-                key={day}
-                style={[
-                  styles.dayCell,
-                  mood?.selected && styles.selectedCell,
-                ]}
-              >
-                {mood ? (
-                  <View
-                    style={[
-                      styles.moodDot,
-                      { backgroundColor: mood.color },
-                      mood.selected && styles.selectedMoodDot,
-                    ]}
-                  >
-                    <Text style={styles.moodEmoji}>{mood.emoji}</Text>
-                  </View>
-                ) : (
-                  <View style={styles.emptyDot} />
-                )}
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-
-        <View style={styles.summaryCard}>
-          <Text style={styles.summaryNumber}>{streakCount}</Text>
-          <View>
-            <Text style={styles.summaryTitle}>mood check-ins</Text>
-            <Text style={styles.summarySubtitle}>
-              Keep snapping to protect your streak.
-            </Text>
-          </View>
-        </View>
+      <View style={styles.weekRow}>
+        {weekLabels.map((day, index) => (
+          <Text key={`${day}-${index}`} style={styles.weekText}>
+            {day}
+          </Text>
+        ))}
       </View>
 
-      <View style={styles.legend}>
-        <Text style={styles.legendText}>😊 Happy</Text>
-        <Text style={styles.legendText}>😌 Calm</Text>
-        <Text style={styles.legendText}>😢 Sad</Text>
-        <Text style={styles.legendText}>😡 Angry</Text>
-        <Text style={styles.legendText}>😴 Tired</Text>
+      <View style={styles.grid}>
+        {cells.map((day, index) => {
+          if (!day) {
+            return <View key={`empty-${index}`} style={styles.dayCell} />;
+          }
+
+          const key = `${year}-${String(month + 1).padStart(2, "0")}-${String(
+            day
+          ).padStart(2, "0")}`;
+          const entry = entriesByDate.get(key);
+          const mood = entry ? getMoodMeta(entry.mood) : null;
+          const isFuture = key > todayKey;
+
+          return (
+            <View
+              key={key}
+              style={[styles.dayCell, isFuture && styles.futureCell]}
+            >
+              {mood ? (
+                <View style={[styles.moodDot, { backgroundColor: mood.color }]}>
+                  <Text style={styles.moodEmoji}>{mood.emoji}</Text>
+                </View>
+              ) : (
+                <Text style={styles.dayNumber}>{day}</Text>
+              )}
+            </View>
+          );
+        })}
       </View>
     </View>
+  );
+}
+
+export default function CalendarScreen() {
+  const { streak, refreshStreak, feedRefreshKey } = useContext(AuthContext);
+  const [entries, setEntries] = useState([]);
+  const [startedAt, setStartedAt] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  const entriesByDate = useMemo(() => {
+    const map = new Map();
+
+    for (const entry of entries) {
+      map.set(entry.date, entry);
+    }
+
+    return map;
+  }, [entries]);
+
+  const months = useMemo(() => buildMonths(startedAt), [startedAt]);
+
+  const loadCalendar = async () => {
+    try {
+      setLoading(true);
+      const result = await getMoodCalendarApi();
+      setEntries(result.entries || []);
+      setStartedAt(result.startedAt);
+      await refreshStreak?.();
+      setError("");
+    } catch (loadError) {
+      setError(loadError.message || "Failed to load calendar.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadCalendar();
+  }, [feedRefreshKey]);
+
+  if (loading) {
+    return (
+      <View style={styles.centerState}>
+        <ActivityIndicator color={COLORS.primary} />
+      </View>
+    );
+  }
+
+  return (
+    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      <View style={styles.header}>
+        <Text style={styles.title}>Mood calendar</Text>
+        <View style={styles.streakBadge}>
+          <Text style={styles.streakText}>🔥 {streak || 0} day streak</Text>
+        </View>
+      </View>
+
+      {!!error && <Text style={styles.errorText}>{error}</Text>}
+
+      {months.map(({ month, year }) => (
+        <MonthGrid
+          key={`${year}-${month}`}
+          month={month}
+          year={year}
+          entriesByDate={entriesByDate}
+        />
+      ))}
+    </ScrollView>
   );
 }
 
@@ -140,137 +178,96 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#000",
+  },
+  content: {
     padding: 18,
-    justifyContent: "center",
+    paddingTop: 64,
+    paddingBottom: 120,
   },
-  card: {
-    backgroundColor: "#111",
-    borderRadius: 34,
-    padding: 22,
-    borderWidth: 1,
-    borderColor: "#1d1d1d",
-  },
-  headerRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    marginBottom: 24,
-  },
-  title: {
-    color: "#fff",
-    fontSize: 31,
-    fontWeight: "900",
-  },
-  subtitle: {
-    color: "#555",
-    fontSize: 17,
-    fontWeight: "700",
-    marginTop: 8,
-  },
-  navRow: {
-    flexDirection: "row",
-    gap: 12,
-  },
-  navButton: {
-    width: 54,
-    height: 54,
-    borderRadius: 22,
-    backgroundColor: "#181818",
+  centerState: {
+    flex: 1,
+    backgroundColor: "#000",
     justifyContent: "center",
     alignItems: "center",
   },
-  navText: {
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 20,
+  },
+  title: {
     color: "#fff",
-    fontSize: 42,
-    lineHeight: 44,
-    fontWeight: "500",
+    fontSize: 30,
+    fontWeight: "900",
+  },
+  streakBadge: {
+    backgroundColor: "#202020",
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+  },
+  streakText: {
+    color: COLORS.primary,
+    fontWeight: "900",
+  },
+  errorText: {
+    color: COLORS.danger,
+    fontWeight: "800",
+    marginBottom: 14,
+  },
+  monthCard: {
+    backgroundColor: "#111",
+    borderRadius: 28,
+    padding: 18,
+    marginBottom: 18,
+    borderWidth: 1,
+    borderColor: "#1d1d1d",
+  },
+  monthTitle: {
+    color: "#fff",
+    fontSize: 24,
+    fontWeight: "900",
+    marginBottom: 18,
   },
   weekRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 14,
+    marginBottom: 10,
   },
   weekText: {
-    width: 38,
+    width: "14.28%",
     textAlign: "center",
     color: "#666",
-    fontSize: 15,
+    fontSize: 13,
     fontWeight: "900",
   },
   grid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    rowGap: 20,
-    justifyContent: "space-between",
+    rowGap: 12,
   },
   dayCell: {
     width: "14.28%",
-    height: 42,
+    height: 38,
     justifyContent: "center",
     alignItems: "center",
   },
-  emptyDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: "#4a4d55",
+  futureCell: {
+    opacity: 0.26,
+  },
+  dayNumber: {
+    color: "#555",
+    fontSize: 13,
+    fontWeight: "800",
   },
   moodDot: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     justifyContent: "center",
     alignItems: "center",
-  },
-  selectedCell: {
-    borderWidth: 3,
-    borderColor: "#FFD60A",
-    borderRadius: 18,
-  },
-  selectedMoodDot: {
-    backgroundColor: "transparent",
   },
   moodEmoji: {
-    fontSize: 15,
-  },
-  summaryCard: {
-    marginTop: 30,
-    borderRadius: 24,
-    backgroundColor: "#181818",
-    padding: 18,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
-  },
-  summaryNumber: {
-    color: COLORS?.primary || "#D6509A",
-    fontSize: 38,
-    fontWeight: "900",
-  },
-  summaryTitle: {
-    color: "#fff",
-    fontSize: 17,
-    fontWeight: "900",
-  },
-  summarySubtitle: {
-    color: "#777",
-    marginTop: 3,
-    fontSize: 13,
-  },
-  legend: {
-    marginTop: 18,
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
-    justifyContent: "center",
-  },
-  legendText: {
-    color: "#aaa",
-    backgroundColor: "#151515",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 999,
-    fontSize: 13,
-    fontWeight: "700",
+    fontSize: 16,
   },
 });

@@ -12,6 +12,32 @@ export const getSnapsApi = async () => {
   return data;
 };
 
+export const getFeedApi = async ({ cursor, limit = 20 } = {}) => {
+  const token = await getToken();
+  const params = new URLSearchParams({
+    limit: String(limit),
+  });
+
+  if (cursor) {
+    params.set("cursor", cursor);
+  }
+
+  const response = await fetch(`${API_BASE_URL}/snaps/feed?${params.toString()}`, {
+    headers: token
+      ? {
+          Authorization: `Bearer ${token}`,
+        }
+      : undefined,
+  });
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.message || "Failed to get feed");
+  }
+
+  return data;
+};
+
 export const createSnapApi = async ({ imageUri, mood, caption }) => {
   const token = await getToken();
   const formData = new FormData();

@@ -1,63 +1,207 @@
-import React from "react";
-import { View, Text, StyleSheet, ScrollView } from "react-native";
+import React, { useCallback, useContext, useEffect, useState } from "react";
+import {
+  ActivityIndicator,
+  Dimensions,
+  FlatList,
+  Image,
+  Modal,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { getFeedApi } from "../../api/snapApi";
+import { AuthContext } from "../../context/AuthContext";
 import { COLORS } from "../../constants/colors";
+import { getMoodMeta } from "../../utils/moods";
+import { formatUploadTime } from "../../utils/time";
 
-const posts = [
-  {
-    id: 1,
-    name: "Mia",
-    mood: "Happy",
-    emoji: "😊",
-    color: "#FFD166",
-    time: "2 min ago",
-  },
-  {
-    id: 2,
-    name: "Leo",
-    mood: "Calm",
-    emoji: "😌",
-    color: "#80ED99",
-    time: "12 min ago",
-  },
-  {
-    id: 3,
-    name: "Ngoc",
-    mood: "Tired",
-    emoji: "😴",
-    color: "#B197FC",
-    time: "Today",
-  },
-];
+const { height } = Dimensions.get("window");
+const CARD_HEIGHT = Math.round(height * 0.33);
 
-export default function FeedScreen() {
+function Avatar({ user }) {
+  if (user?.avatarUrl) {
+    return <Image source={{ uri: user.avatarUrl }} style={styles.avatar} />;
+  }
+
+  const initial = user?.username?.[0]?.toUpperCase() || "?";
+
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.logo}>MoodSnap</Text>
-      <Text style={styles.title}>Friends' moments</Text>
-      <Text style={styles.subtitle}>See what your close friends are feeling.</Text>
+    <View style={styles.avatarFallback}>
+      <Text style={styles.avatarInitial}>{initial}</Text>
+    </View>
+  );
+}
 
-      {posts.map((post) => (
-        <View key={post.id} style={[styles.card, { borderColor: post.color }]}>
-          <View style={styles.photoMock}>
-            <Text style={styles.photoEmoji}>📸</Text>
-            <Text style={styles.photoText}>{post.name}'s snap</Text>
-          </View>
+function FeedCard({ item, onOpen }) {
+  const mood = getMoodMeta(item.mood);
+  const name = item.user?.username || "MoodSnap user";
 
-          <View style={styles.cardFooter}>
-            <View>
-              <Text style={styles.name}>{post.name}</Text>
-              <Text style={styles.time}>{post.time}</Text>
-            </View>
+  return (
+    <TouchableOpacity
+      style={styles.card}
+      onPress={() => onOpen(item)}
+      activeOpacity={0.9}
+    >
+      <Image source={{ uri: item.imageUrl }} style={styles.cardImage} />
+      <View style={styles.cardScrim} />
+      <Text style={styles.cardTime}>{formatUploadTime(item.createdAt)}</Text>
 
-            <View style={[styles.moodBadge, { backgroundColor: post.color }]}>
-              <Text style={styles.moodText}>
-                {post.emoji} {post.mood}
-              </Text>
-            </View>
+      <View style={styles.cardFooter}>
+        <View style={styles.userRow}>
+          <Avatar user={item.user} />
+          <View>
+            <Text style={styles.name}>{name}</Text>
+            <Text style={styles.moodText}>
+              {mood.emoji} {item.mood}
+            </Text>
           </View>
         </View>
-      ))}
-    </ScrollView>
+
+        <View style={[styles.moodPill, { backgroundColor: mood.color }]}>
+          <Text style={styles.moodPillText}>{mood.emoji}</Text>
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+export default function FeedScreen() {
+  const { feedRefreshKey } = useContext(AuthContext);
+  const [snaps, setSnaps] = useState([]);
+  const [nextCursor, setNextCursor] = useState(null);
+  const [selectedSnap, setSelectedSnap] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState("");
+
+  const loadFeed = useCallback(async ({ reset = false } = {}) => {
+    try {
+      if (reset) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
+      }
+
+      const result = await getFeedApi({ limit: 20 });
+      setSnaps(result.snaps || []);
+      setNextCursor(result.nextCursor || null);
+      setError("");
+    } catch (loadError) {
+      setError(loadError.message || "Failed to load feed.");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  const loadMore = async () => {
+    if (!nextCursor || loadingMore) {
+      return;
+    }
+
+    try {
+      setLoadingMore(true);
+      const result = await getFeedApi({ cursor: nextCursor, limit: 20 });
+      setSnaps((current) => [...current, ...(result.snaps || [])]);
+      setNextCursor(result.nextCursor || null);
+    } catch (loadError) {
+      setError(loadError.message || "Failed to load more snaps.");
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+
+  useEffect(() => {
+    loadFeed();
+  }, [loadFeed, feedRefreshKey]);
+
+  if (loading && snaps.length === 0) {
+    return (
+      <View style={styles.centerState}>
+        <ActivityIndicator color={COLORS.primary} />
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.container}>
+      <FlatList
+        data={snaps}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={styles.content}
+        ListHeaderComponent={
+          <View style={styles.header}>
+            <Text style={styles.logo}>MoodSnap</Text>
+            <Text style={styles.title}>Friends' moments</Text>
+            <Text style={styles.subtitle}>
+              See what your close friends are feeling.
+            </Text>
+            {!!error && <Text style={styles.errorText}>{error}</Text>}
+          </View>
+        }
+        ListEmptyComponent={
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyTitle}>No snaps yet</Text>
+            <Text style={styles.emptyText}>
+              Upload your first mood snap or add friends to fill your feed.
+            </Text>
+          </View>
+        }
+        renderItem={({ item }) => (
+          <FeedCard item={item} onOpen={setSelectedSnap} />
+        )}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            tintColor={COLORS.primary}
+            onRefresh={() => loadFeed({ reset: true })}
+          />
+        }
+        onEndReached={loadMore}
+        onEndReachedThreshold={0.5}
+        ListFooterComponent={
+          loadingMore ? (
+            <ActivityIndicator color={COLORS.primary} style={styles.footerLoader} />
+          ) : null
+        }
+      />
+
+      <Modal
+        visible={Boolean(selectedSnap)}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setSelectedSnap(null)}
+      >
+        <View style={styles.modalBackdrop}>
+          <TouchableOpacity
+            style={styles.closeArea}
+            activeOpacity={1}
+            onPress={() => setSelectedSnap(null)}
+          />
+          <View style={styles.modalCard}>
+            {selectedSnap && (
+              <>
+                <Image
+                  source={{ uri: selectedSnap.imageUrl }}
+                  style={styles.modalImage}
+                  resizeMode="contain"
+                />
+                <Text style={styles.modalTitle}>
+                  {selectedSnap.user?.username || "MoodSnap user"}
+                </Text>
+                <Text style={styles.modalMeta}>
+                  {formatUploadTime(selectedSnap.createdAt)} ·{" "}
+                  {getMoodMeta(selectedSnap.mood).emoji} {selectedSnap.mood}
+                </Text>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
+    </View>
   );
 }
 
@@ -67,72 +211,174 @@ const styles = StyleSheet.create({
     backgroundColor: "#000",
   },
   content: {
-    padding: 20,
-    paddingTop: 70,
+    padding: 18,
+    paddingTop: 64,
     paddingBottom: 120,
   },
+  centerState: {
+    flex: 1,
+    backgroundColor: "#000",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  header: {
+    marginBottom: 22,
+  },
   logo: {
-    color: COLORS?.primary || "#D6509A",
-    fontSize: 42,
+    color: COLORS.primary,
+    fontSize: 40,
     fontWeight: "900",
   },
   title: {
     color: "#fff",
-    fontSize: 28,
+    fontSize: 27,
     fontWeight: "900",
-    marginTop: 18,
+    marginTop: 16,
   },
   subtitle: {
     color: "#888",
-    fontSize: 16,
+    fontSize: 15,
     marginTop: 6,
-    marginBottom: 24,
+  },
+  errorText: {
+    color: COLORS.danger,
+    marginTop: 12,
+    fontWeight: "800",
   },
   card: {
-    backgroundColor: "#111",
-    borderRadius: 28,
-    borderWidth: 3,
-    padding: 14,
-    marginBottom: 22,
+    height: CARD_HEIGHT,
+    borderRadius: 30,
+    overflow: "hidden",
+    backgroundColor: "#161616",
+    marginBottom: 20,
   },
-  photoMock: {
-    height: 310,
+  cardImage: {
+    ...StyleSheet.absoluteFillObject,
+    width: "100%",
+    height: "100%",
+    resizeMode: "cover",
+  },
+  cardScrim: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.18)",
+  },
+  cardTime: {
+    position: "absolute",
+    alignSelf: "center",
+    top: "39%",
+    color: "#fff",
+    fontSize: 42,
+    fontWeight: "900",
+    textShadowColor: "rgba(0,0,0,0.45)",
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 10,
+  },
+  cardFooter: {
+    position: "absolute",
+    left: 16,
+    right: 16,
+    bottom: 16,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-end",
+  },
+  userRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  avatar: {
+    width: 44,
+    height: 44,
     borderRadius: 22,
-    backgroundColor: "#202020",
+    backgroundColor: "#333",
+  },
+  avatarFallback: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: COLORS.primary,
     justifyContent: "center",
     alignItems: "center",
   },
-  photoEmoji: {
-    fontSize: 52,
-    marginBottom: 10,
-  },
-  photoText: {
+  avatarInitial: {
     color: "#fff",
-    fontSize: 24,
-    fontWeight: "800",
-  },
-  cardFooter: {
-    marginTop: 14,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
+    fontSize: 18,
+    fontWeight: "900",
   },
   name: {
     color: "#fff",
-    fontSize: 20,
+    fontSize: 21,
     fontWeight: "900",
-  },
-  time: {
-    color: "#777",
-    marginTop: 3,
-  },
-  moodBadge: {
-    borderRadius: 999,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
   },
   moodText: {
-    color: "#111",
+    color: "#f4f4f4",
+    fontSize: 13,
+    fontWeight: "800",
+    marginTop: 2,
+  },
+  moodPill: {
+    minWidth: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  moodPillText: {
+    fontSize: 20,
+  },
+  emptyCard: {
+    minHeight: 220,
+    borderRadius: 28,
+    backgroundColor: "#151515",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
+  },
+  emptyTitle: {
+    color: "#fff",
+    fontSize: 22,
     fontWeight: "900",
+  },
+  emptyText: {
+    color: "#888",
+    textAlign: "center",
+    marginTop: 8,
+    lineHeight: 20,
+  },
+  footerLoader: {
+    marginVertical: 20,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.9)",
+    justifyContent: "center",
+    padding: 18,
+  },
+  closeArea: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  modalCard: {
+    borderRadius: 30,
+    backgroundColor: "#111",
+    padding: 14,
+  },
+  modalImage: {
+    width: "100%",
+    height: height * 0.62,
+    borderRadius: 24,
+    backgroundColor: "#050505",
+  },
+  modalTitle: {
+    color: "#fff",
+    fontSize: 22,
+    fontWeight: "900",
+    marginTop: 16,
+  },
+  modalMeta: {
+    color: "#aaa",
+    fontSize: 14,
+    fontWeight: "800",
+    marginTop: 4,
   },
 });
