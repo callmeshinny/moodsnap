@@ -13,6 +13,12 @@ export type UserRecord = {
   updated_at?: string;
 };
 
+export const isUuid = (value: string) => {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value
+  );
+};
+
 export const mapUser = (user: UserRecord) => ({
   id: user.id,
   username: user.username,
@@ -79,7 +85,7 @@ export const updateUserProfile = async (
 };
 
 export const getUsersByIds = async (userIds: string[]) => {
-  const uniqueIds = Array.from(new Set(userIds.filter(Boolean)));
+  const uniqueIds = Array.from(new Set(userIds.filter(isUuid)));
 
   if (uniqueIds.length === 0) {
     return new Map<string, ReturnType<typeof mapUser>>();

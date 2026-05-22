@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { uploadImageToCloudinary } from "../services/upload.service";
 import { supabase } from "../config/supabase";
-import { getUsersByIds } from "../services/user.service";
+import { getUsersByIds, isUuid } from "../services/user.service";
 
 const TABLE_NAME = "moodsnap";
 
@@ -136,7 +136,9 @@ export const getFeed = async (req: Request, res: Response): Promise<void> => {
     }
 
     const rows = snaps || [];
-    const pageRows = rows.slice(0, limit);
+    const pageRows = rows
+      .filter((snap) => isUuid(String(snap.user_id)))
+      .slice(0, limit);
     const usersById = await getUsersByIds(
       pageRows.map((snap) => String(snap.user_id))
     );

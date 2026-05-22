@@ -22,6 +22,11 @@ export default function CameraScreen() {
   const [capturedImageUri, setCapturedImageUri] = useState(null);
   const [selectedMood, setSelectedMood] = useState(null);
   const [posting, setPosting] = useState(false);
+  const [cameraFacing, setCameraFacing] = useState("back");
+
+  const handleFlipCamera = () => {
+    setCameraFacing((current) => (current === "back" ? "front" : "back"));
+  };
 
   const handleCapture = async () => {
     try {
@@ -136,7 +141,20 @@ export default function CameraScreen() {
         </View>
 
         {!hasCaptured || !capturedImageUri ? (
-          <CameraView ref={cameraRef} style={styles.camera} facing="back" />
+          <>
+            <CameraView
+              ref={cameraRef}
+              style={styles.camera}
+              facing={cameraFacing}
+            />
+            <TouchableOpacity
+              style={styles.flipButton}
+              onPress={handleFlipCamera}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.flipText}>↻</Text>
+            </TouchableOpacity>
+          </>
         ) : (
           <>
             <Image source={{ uri: capturedImageUri }} style={styles.camera} />
@@ -252,6 +270,24 @@ const styles = StyleSheet.create({
   streakText: {
     color: "#fff",
     fontWeight: "900",
+  },
+  flipButton: {
+    position: "absolute",
+    right: 22,
+    bottom: 22,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: "rgba(0,0,0,0.58)",
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 2,
+  },
+  flipText: {
+    color: "#fff",
+    fontSize: 30,
+    fontWeight: "900",
+    lineHeight: 32,
   },
   moodBadge: {
     position: "absolute",
