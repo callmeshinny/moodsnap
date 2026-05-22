@@ -3,7 +3,17 @@ import dotenv from "dotenv";
 dotenv.config();
 
 const getEnv = (key: string, fallback = ""): string => {
-  return process.env[key]?.trim() || fallback;
+  const candidates = [key, key.toLowerCase(), key.toUpperCase()];
+
+  for (const candidate of candidates) {
+    const value = process.env[candidate]?.trim();
+
+    if (value) {
+      return value;
+    }
+  }
+
+  return fallback;
 };
 
 const requireEnv = (key: string): string => {
