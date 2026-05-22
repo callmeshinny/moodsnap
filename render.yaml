@@ -32,5 +32,17 @@ services:
       - key: JWT_SECRET
         sync: false
 
+      - key: JWT_EXPIRES_IN
+        value: 7d
+
+      - key: BREVO_API_KEY
+        sync: false
+
+      - key: SENDER_EMAIL
+        sync: false
+
+      - key: SENDER_NAME
+        value: MoodSnap
+
       - key: FRONTEND_URL
-        value: http://localhost:8081
+        value: https://moodsnap-92ps.onrender.com

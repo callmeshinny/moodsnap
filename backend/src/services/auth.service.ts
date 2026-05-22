@@ -20,6 +20,14 @@ type SignInInput = {
   password: string;
 };
 
+const requireString = (value: unknown, fieldName: string): string => {
+  if (typeof value !== "string" || !value.trim()) {
+    throw new Error(`${fieldName} is required`);
+  }
+
+  return value.trim();
+};
+
 const normalizeEmail = (email: string): string => {
   return email.toLowerCase().trim();
 };
@@ -29,15 +37,13 @@ export const signUpService = async ({
   email,
   password
 }: SignUpInput) => {
-  if (!username || !email || !password) {
-    throw new Error("Username, email and password are required");
-  }
+  const normalizedUsername = requireString(username, "Username");
+  const normalizedEmail = normalizeEmail(requireString(email, "Email"));
+  const normalizedPassword = requireString(password, "Password");
 
-  if (password.length < 6) {
+  if (normalizedPassword.length < 6) {
     throw new Error("Password must be at least 6 characters");
   }
-
-  const normalizedEmail = normalizeEmail(email);
 
   const { data: existingUser, error: findUserError } = await supabase
     .from("users")
@@ -53,13 +59,13 @@ export const signUpService = async ({
     throw new Error("Email is already registered");
   }
 
-  const passwordHash = await bcrypt.hash(password, 10);
+  const passwordHash = await bcrypt.hash(normalizedPassword, 10);
 
   if (existingUser && !existingUser.is_verified) {
     const { error: updateUserError } = await supabase
       .from("users")
       .update({
-        username,
+        username: normalizedUsername,
         password_hash: passwordHash,
         updated_at: new Date().toISOString()
       })
@@ -70,7 +76,7 @@ export const signUpService = async ({
     }
   } else {
     const { error: createUserError } = await supabase.from("users").insert({
-      username,
+      username: normalizedUsername,
       email: normalizedEmail,
       password_hash: passwordHash,
       is_verified: false
@@ -112,17 +118,14 @@ export const signUpService = async ({
 };
 
 export const verifyOtpService = async ({ email, otp }: VerifyOtpInput) => {
-  if (!email || !otp) {
-    throw new Error("Email and OTP are required");
-  }
-
-  const normalizedEmail = normalizeEmail(email);
+  const normalizedEmail = normalizeEmail(requireString(email, "Email"));
+  const normalizedOtp = requireString(otp, "OTP");
 
   const { data: otpRecord, error: otpError } = await supabase
     .from("otps")
     .select("*")
     .eq("email", normalizedEmail)
-    .eq("otp_code", otp)
+    .eq("otp_code", normalizedOtp)
     .eq("is_used", false)
     .order("created_at", { ascending: false })
     .limit(1)
@@ -184,11 +187,8 @@ export const verifyOtpService = async ({ email, otp }: VerifyOtpInput) => {
 };
 
 export const signInService = async ({ email, password }: SignInInput) => {
-  if (!email || !password) {
-    throw new Error("Email and password are required");
-  }
-
-  const normalizedEmail = normalizeEmail(email);
+  const normalizedEmail = normalizeEmail(requireString(email, "Email"));
+  const normalizedPassword = requireString(password, "Password");
 
   const { data: user, error: userError } = await supabase
     .from("users")
@@ -209,7 +209,7 @@ export const signInService = async ({ email, password }: SignInInput) => {
   }
 
   const isPasswordCorrect = await bcrypt.compare(
-    password,
+    normalizedPassword,
     user.password_hash
   );
 
@@ -237,11 +237,7 @@ export const signInService = async ({ email, password }: SignInInput) => {
 };
 
 export const resendOtpService = async (email: string) => {
-  if (!email) {
-    throw new Error("Email is required");
-  }
-
-  const normalizedEmail = normalizeEmail(email);
+  const normalizedEmail = normalizeEmail(requireString(email, "Email"));
 
   const { data: user, error: userError } = await supabase
     .from("users")

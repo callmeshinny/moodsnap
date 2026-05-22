@@ -2,20 +2,34 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
+const getEnv = (key: string, fallback = ""): string => {
+  return process.env[key]?.trim() || fallback;
+};
+
+const requireEnv = (key: string): string => {
+  const value = getEnv(key);
+
+  if (!value) {
+    throw new Error(`${key} is missing in environment variables`);
+  }
+
+  return value;
+};
+
 export const env = {
-  port: process.env.PORT || "5001",
+  port: getEnv("PORT", "5001"),
 
-  supabaseUrl: process.env.SUPABASE_URL || "",
-  supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY || "",
+  supabaseUrl: requireEnv("SUPABASE_URL"),
+  supabaseServiceRoleKey: requireEnv("SUPABASE_SERVICE_ROLE_KEY"),
 
-  brevoApiKey: process.env.BREVO_API_KEY || "",
-  senderEmail: process.env.SENDER_EMAIL || "",
-  senderName: process.env.SENDER_NAME || "MoodSnap",
+  brevoApiKey: getEnv("BREVO_API_KEY"),
+  senderEmail: getEnv("SENDER_EMAIL"),
+  senderName: getEnv("SENDER_NAME", "MoodSnap"),
 
-  cloudinaryCloudName: process.env.CLOUDINARY_CLOUD_NAME || "",
-  cloudinaryApiKey: process.env.CLOUDINARY_API_KEY || "",
-  cloudinaryApiSecret: process.env.CLOUDINARY_API_SECRET || "",
+  cloudinaryCloudName: requireEnv("CLOUDINARY_CLOUD_NAME"),
+  cloudinaryApiKey: requireEnv("CLOUDINARY_API_KEY"),
+  cloudinaryApiSecret: requireEnv("CLOUDINARY_API_SECRET"),
 
-  jwtSecret: process.env.JWT_SECRET || "moodsnap_secret",
-  jwtExpiresIn: process.env.JWT_EXPIRES_IN || "7d"
+  jwtSecret: requireEnv("JWT_SECRET"),
+  jwtExpiresIn: getEnv("JWT_EXPIRES_IN", "7d")
 };

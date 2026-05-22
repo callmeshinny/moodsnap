@@ -6,11 +6,11 @@ export const sendOtpEmail = async (
   otp: string
 ): Promise<void> => {
   if (!env.brevoApiKey) {
-    throw new Error("BREVO_API_KEY is missing in .env");
+    throw new Error("BREVO_API_KEY is missing in environment variables");
   }
 
   if (!env.senderEmail) {
-    throw new Error("SENDER_EMAIL is missing in .env");
+    throw new Error("SENDER_EMAIL is missing in environment variables");
   }
 
   const apiInstance = new brevo.TransactionalEmailsApi();
@@ -45,5 +45,12 @@ export const sendOtpEmail = async (
     </div>
   `;
 
-  await apiInstance.sendTransacEmail(sendSmtpEmail);
+  try {
+    await apiInstance.sendTransacEmail(sendSmtpEmail);
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Unknown Brevo error";
+
+    throw new Error(`Failed to send OTP email through Brevo: ${message}`);
+  }
 };

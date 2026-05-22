@@ -1,4 +1,5 @@
 import { API_BASE_URL } from "../constants/config";
+import { getToken } from "../storage/tokenStorage";
 
 export const getSnapsApi = async () => {
   const response = await fetch(`${API_BASE_URL}/snaps`);
@@ -12,6 +13,7 @@ export const getSnapsApi = async () => {
 };
 
 export const createSnapApi = async ({ imageUri, mood, caption }) => {
+  const token = await getToken();
   const formData = new FormData();
 
   formData.append("image", {
@@ -28,6 +30,11 @@ export const createSnapApi = async ({ imageUri, mood, caption }) => {
 
   const response = await fetch(`${API_BASE_URL}/snaps`, {
     method: "POST",
+    headers: token
+      ? {
+          Authorization: `Bearer ${token}`,
+        }
+      : undefined,
     body: formData,
   });
 

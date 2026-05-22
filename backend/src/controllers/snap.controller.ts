@@ -7,6 +7,15 @@ const TABLE_NAME = "moodsnap";
 export const createSnap = async (req: Request, res: Response): Promise<void> => {
   try {
     const { mood, caption } = req.body;
+    const userId = req.user?.id;
+
+    if (!userId) {
+      res.status(401).json({
+        success: false,
+        message: "Authentication is required",
+      });
+      return;
+    }
 
     if (!req.file) {
       res.status(400).json({
@@ -29,7 +38,7 @@ export const createSnap = async (req: Request, res: Response): Promise<void> => 
     const { data: snap, error } = await supabase
       .from(TABLE_NAME)
       .insert({
-        user_id: "test-user-1",
+        user_id: userId,
         mood,
         caption: caption || null,
         image_url: uploadedImage.secure_url,
@@ -88,11 +97,21 @@ export const getSnaps = async (_req: Request, res: Response): Promise<void> => {
 export const deleteSnap = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
+    const userId = req.user?.id;
+
+    if (!userId) {
+      res.status(401).json({
+        success: false,
+        message: "Authentication is required",
+      });
+      return;
+    }
 
     const { data: snap, error: findError } = await supabase
       .from(TABLE_NAME)
       .select("*")
       .eq("id", id)
+      .eq("user_id", userId)
       .single();
 
     if (findError || !snap) {
@@ -106,7 +125,8 @@ export const deleteSnap = async (req: Request, res: Response): Promise<void> => 
     await supabase
       .from(TABLE_NAME)
       .delete()
-      .eq("id", id);
+      .eq("id", id)
+      .eq("user_id", userId);
 
     res.status(200).json({
       success: true,

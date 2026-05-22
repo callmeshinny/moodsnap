@@ -56,7 +56,7 @@ export default function VerifyOtpScreen() {
     try {
       setResending(true);
 
-      const result = await resendOtpApi({ email });
+      const result = await resendOtpApi(email);
 
       Alert.alert("OTP resent", result.message || "Please check your email.");
     } catch (error) {

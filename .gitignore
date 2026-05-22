@@ -11,6 +11,7 @@ frontend/.env
 frontend/.env.*
 backend/.env
 backend/.env.*
+!backend/.env.example
 *.pem
 *.key
 *.cert
@@ -62,6 +63,7 @@ coverage/
 
 # Cloudinary / Supabase local dump or backup files
 *.sql
+!backend/sql/*.sql
 *.dump
 *.backup
 
