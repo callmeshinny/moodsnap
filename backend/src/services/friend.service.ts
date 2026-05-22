@@ -1,5 +1,5 @@
 import { supabase } from "../config/supabase";
-import { getUserById, getUsersByIds } from "./user.service";
+import { getUserById, getUserByUsername, getUsersByIds } from "./user.service";
 
 type FriendshipRecord = {
   id: string;
@@ -26,11 +26,11 @@ const mapFriendship = (friendship: FriendshipRecord) => ({
 });
 
 export const getFriendLink = async (userId: string) => {
-  await getUserById(userId);
+  const user = await getUserById(userId);
 
   return {
     userId,
-    friendLink: `frontend://friends/${userId}`,
+    friendLink: `moodsnap.cam/${encodeURIComponent(user.username)}`,
   };
 };
 
@@ -42,13 +42,20 @@ export const sendFriendRequest = async (
     throw new Error("Receiver id is required");
   }
 
-  const targetUserId = receiverId.trim();
+  const receiverIdentifier = receiverId.trim();
+  const receiver =
+    (await getUserByUsername(receiverIdentifier)) ||
+    (await getUserById(receiverIdentifier).catch(() => null));
+
+  if (!receiver) {
+    throw new Error("User not found");
+  }
+
+  const targetUserId = receiver.id;
 
   if (senderId === targetUserId) {
     throw new Error("You cannot add yourself as a friend");
   }
-
-  await getUserById(targetUserId);
 
   const [userOneId, userTwoId] = orderedPair(senderId, targetUserId);
 

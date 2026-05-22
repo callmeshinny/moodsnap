@@ -139,7 +139,6 @@ export default function FeedScreen() {
             <Text style={styles.subtitle}>
               See what your close friends are feeling.
             </Text>
-            {!!error && <Text style={styles.errorText}>{error}</Text>}
           </View>
         }
         ListEmptyComponent={

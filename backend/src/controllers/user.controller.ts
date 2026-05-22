@@ -1,5 +1,9 @@
 import { Request, Response } from "express";
-import { getUserById, updateUserProfile } from "../services/user.service";
+import {
+  deleteUserAccount,
+  getUserById,
+  updateUserProfile,
+} from "../services/user.service";
 
 export const getMe = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -47,6 +51,33 @@ export const updateMe = async (req: Request, res: Response): Promise<void> => {
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Failed to update profile";
+
+    res.status(400).json({
+      success: false,
+      message,
+    });
+  }
+};
+
+export const deleteMe = async (req: Request, res: Response): Promise<void> => {
+  try {
+    if (!req.user?.id) {
+      res.status(401).json({
+        success: false,
+        message: "Authentication is required",
+      });
+      return;
+    }
+
+    await deleteUserAccount(req.user.id);
+
+    res.status(200).json({
+      success: true,
+      message: "Account deleted successfully",
+    });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to delete account";
 
     res.status(400).json({
       success: false,

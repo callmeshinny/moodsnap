@@ -50,6 +50,7 @@ create table if not exists public.friendships (
 );
 
 create index if not exists users_email_idx on public.users (email);
+create unique index if not exists users_username_unique_idx on public.users (username);
 create index if not exists otps_email_is_used_idx on public.otps (email, is_used);
 create index if not exists moodsnap_created_at_idx on public.moodsnap (created_at desc);
 create index if not exists moodsnap_user_id_idx on public.moodsnap (user_id);

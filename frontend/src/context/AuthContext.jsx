@@ -55,6 +55,8 @@ export function AuthProvider({ children }) {
     if (result.user) {
       await saveUser(result.user);
       setUser(result.user);
+      const linkResult = await getFriendLinkApi().catch(() => null);
+      setFriendLink(linkResult?.friendLink || "");
     }
 
     return result.user;

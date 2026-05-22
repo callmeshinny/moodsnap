@@ -1,4 +1,5 @@
 import { supabase } from "../config/supabase";
+import cloudinary from "../config/cloudinary";
 
 export type UserRecord = {
   id: string;
@@ -36,6 +37,20 @@ export const getUserById = async (userId: string) => {
   }
 
   return mapUser(user);
+};
+
+export const getUserByUsername = async (username: string) => {
+  const { data: user, error } = await supabase
+    .from("users")
+    .select("id, username, email, avatar_url, timezone, calendar_mode, is_verified, created_at, updated_at")
+    .eq("username", username)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return user ? mapUser(user) : null;
 };
 
 export const updateUserProfile = async (
@@ -86,4 +101,61 @@ export const getUsersByIds = async (userIds: string[]) => {
   }
 
   return userMap;
+};
+
+export const deleteUserAccount = async (userId: string) => {
+  const user = await getUserById(userId);
+
+  const { data: snaps, error: snapsError } = await supabase
+    .from("moodsnap")
+    .select("image_public_id")
+    .eq("user_id", userId);
+
+  if (snapsError) {
+    throw new Error(snapsError.message);
+  }
+
+  for (const snap of snaps || []) {
+    if (snap.image_public_id) {
+      await cloudinary.uploader.destroy(snap.image_public_id).catch(() => null);
+    }
+  }
+
+  const { error: snapDeleteError } = await supabase
+    .from("moodsnap")
+    .delete()
+    .eq("user_id", userId);
+
+  if (snapDeleteError) {
+    throw new Error(snapDeleteError.message);
+  }
+
+  const { error: friendshipDeleteError } = await supabase
+    .from("friendships")
+    .delete()
+    .or(`user_one_id.eq.${userId},user_two_id.eq.${userId},requested_by.eq.${userId}`);
+
+  if (friendshipDeleteError) {
+    throw new Error(friendshipDeleteError.message);
+  }
+
+  const { error: otpDeleteError } = await supabase
+    .from("otps")
+    .delete()
+    .eq("email", user.email);
+
+  if (otpDeleteError) {
+    throw new Error(otpDeleteError.message);
+  }
+
+  const { error: userDeleteError } = await supabase
+    .from("users")
+    .delete()
+    .eq("id", userId);
+
+  if (userDeleteError) {
+    throw new Error(userDeleteError.message);
+  }
+
+  return true;
 };

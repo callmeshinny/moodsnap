@@ -42,10 +42,14 @@ export const createSnapApi = async ({ imageUri, mood, caption }) => {
   const token = await getToken();
   const formData = new FormData();
 
+  const fileName = imageUri.split("/").pop() || "snap.jpg";
+  const extension = fileName.split(".").pop()?.toLowerCase();
+  const imageType = extension === "png" ? "image/png" : "image/jpeg";
+
   formData.append("image", {
     uri: imageUri,
-    name: "snap.jpg",
-    type: "image/jpeg",
+    name: fileName.includes(".") ? fileName : "snap.jpg",
+    type: imageType,
   });
 
   formData.append("mood", mood);

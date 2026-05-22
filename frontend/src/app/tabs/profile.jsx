@@ -16,6 +16,7 @@ import {
   getFriendRequestsApi,
   rejectFriendRequestApi,
 } from "../../api/friendApi";
+import { deleteMeApi } from "../../api/userApi";
 import { AuthContext } from "../../context/AuthContext";
 import { COLORS } from "../../constants/colors";
 
@@ -74,11 +75,20 @@ export default function ProfileScreen() {
   }, [user?.username]);
 
   const handleSignOut = async () => {
-    await logout?.();
-    router.replace("/auth/signin");
+    Alert.alert("Sign out", "Are you sure you want to sign out?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Sign out",
+        style: "destructive",
+        onPress: async () => {
+          await logout?.();
+          router.replace("/auth/signin");
+        },
+      },
+    ]);
   };
 
-  const handleShareFriendLink = async () => {
+  const handleCopyFriendLink = async () => {
     const link = friendLink || (await refreshFriendLink?.());
 
     if (!link) {
@@ -86,9 +96,35 @@ export default function ProfileScreen() {
       return;
     }
 
-    await Share.share({
-      message: `Add me on MoodSnap: ${link}`,
-    });
+    await Share.share({ message: link });
+  };
+
+  const handleDeleteAccount = async () => {
+    Alert.alert(
+      "Delete account",
+      "Are you sure you want to delete your account? This will remove your profile, snaps, OTP records, and friendships from the database.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await deleteMeApi();
+              await logout?.();
+              router.replace("/auth/signin");
+            } catch (error) {
+              Alert.alert(
+                "Delete failed",
+                error.response?.data?.message ||
+                  error.message ||
+                  "Could not delete account."
+              );
+            }
+          },
+        },
+      ]
+    );
   };
 
   const handleSaveName = async () => {
@@ -160,7 +196,11 @@ export default function ProfileScreen() {
         </View>
 
         <Text style={styles.name}>{displayName}</Text>
-        <Text style={styles.link}>{friendLink || "Loading friend link..."}</Text>
+        <TouchableOpacity onPress={handleCopyFriendLink} activeOpacity={0.75}>
+          <Text style={styles.link}>
+            {friendLink || "Loading friend link..."}
+          </Text>
+        </TouchableOpacity>
 
         <View style={styles.quickRow}>
           <TouchableOpacity style={styles.quickButton} activeOpacity={0.8}>
@@ -170,7 +210,7 @@ export default function ProfileScreen() {
 
           <TouchableOpacity
             style={styles.quickButton}
-            onPress={handleShareFriendLink}
+            onPress={handleCopyFriendLink}
             activeOpacity={0.8}
           >
             <Text style={styles.quickIcon}>📤</Text>
@@ -238,6 +278,12 @@ export default function ProfileScreen() {
       </Section>
 
       <Section title="Account">
+        <SettingRow
+          icon="🗑️"
+          label="Delete account"
+          danger
+          onPress={handleDeleteAccount}
+        />
         <SettingRow icon="👋" label="Sign out" onPress={handleSignOut} />
       </Section>
 
