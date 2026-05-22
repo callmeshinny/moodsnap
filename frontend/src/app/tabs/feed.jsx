@@ -11,7 +11,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { getFeedApi } from "../../api/snapApi";
+import { getFeedApi, getSnapsApi } from "../../api/snapApi";
 import { AuthContext } from "../../context/AuthContext";
 import { COLORS } from "../../constants/colors";
 import { getMoodMeta } from "../../utils/moods";
@@ -90,7 +90,16 @@ export default function FeedScreen() {
       setNextCursor(result.nextCursor || null);
       setError("");
     } catch (loadError) {
-      setError(loadError.message || "Failed to load feed.");
+      try {
+        const fallbackResult = await getSnapsApi();
+        setSnaps(fallbackResult.snaps || []);
+        setNextCursor(null);
+        setError("");
+      } catch {
+        setSnaps([]);
+        setNextCursor(null);
+        setError("");
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -108,7 +117,7 @@ export default function FeedScreen() {
       setSnaps((current) => [...current, ...(result.snaps || [])]);
       setNextCursor(result.nextCursor || null);
     } catch (loadError) {
-      setError(loadError.message || "Failed to load more snaps.");
+      setError("");
     } finally {
       setLoadingMore(false);
     }

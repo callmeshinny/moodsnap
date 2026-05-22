@@ -1,7 +1,7 @@
 import React, { createContext, useEffect, useState } from "react";
 import { getFriendCountApi, getFriendLinkApi } from "../api/friendApi";
 import { getMoodStreakApi } from "../api/moodApi";
-import { getMeApi, updateMeApi } from "../api/userApi";
+import { getMeApi, updateMeApi, uploadProfilePhotoApi } from "../api/userApi";
 import {
   getToken,
   getUser,
@@ -57,6 +57,17 @@ export function AuthProvider({ children }) {
       setUser(result.user);
       const linkResult = await getFriendLinkApi().catch(() => null);
       setFriendLink(linkResult?.friendLink || "");
+    }
+
+    return result.user;
+  };
+
+  const updateProfilePhoto = async (imageUri) => {
+    const result = await uploadProfilePhotoApi(imageUri);
+
+    if (result.user) {
+      await saveUser(result.user);
+      setUser(result.user);
     }
 
     return result.user;
@@ -131,6 +142,7 @@ export function AuthProvider({ children }) {
         refreshAppData,
         refreshProfile,
         updateUser,
+        updateProfilePhoto,
         refreshFriendCount,
         refreshFriendLink,
         refreshStreak,

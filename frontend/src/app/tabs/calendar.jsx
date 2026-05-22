@@ -1,15 +1,19 @@
 import React, { useContext, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Image,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
+  TouchableOpacity,
   View,
 } from "react-native";
 import { getMoodCalendarApi } from "../../api/moodApi";
 import { AuthContext } from "../../context/AuthContext";
 import { COLORS } from "../../constants/colors";
 import { getMoodMeta } from "../../utils/moods";
+import { formatUploadTime } from "../../utils/time";
 
 const monthLabels = [
   "January",
@@ -48,7 +52,7 @@ const buildMonths = (startedAt) => {
   return months;
 };
 
-function MonthGrid({ month, year, entriesByDate }) {
+function MonthGrid({ month, year, entriesByDate, onOpenEntry }) {
   const todayKey = dateKey(new Date());
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const firstDay = new Date(year, month, 1).getDay();
@@ -85,10 +89,16 @@ function MonthGrid({ month, year, entriesByDate }) {
           const mood = entry ? getMoodMeta(entry.mood) : null;
           const isFuture = key > todayKey;
 
+          const CellComponent = entry?.imageUrl ? TouchableOpacity : View;
+          const cellPressProps = entry?.imageUrl
+            ? { activeOpacity: 0.72, onPress: () => onOpenEntry(entry) }
+            : {};
+
           return (
-            <View
+            <CellComponent
               key={key}
               style={[styles.dayCell, isFuture && styles.futureCell]}
+              {...cellPressProps}
             >
               {mood ? (
                 <View style={[styles.moodDot, { backgroundColor: mood.color }]}>
@@ -97,7 +107,7 @@ function MonthGrid({ month, year, entriesByDate }) {
               ) : (
                 <Text style={styles.dayNumber}>{day}</Text>
               )}
-            </View>
+            </CellComponent>
           );
         })}
       </View>
@@ -111,6 +121,7 @@ export default function CalendarScreen() {
   const [startedAt, setStartedAt] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [selectedEntry, setSelectedEntry] = useState(null);
 
   const entriesByDate = useMemo(() => {
     const map = new Map();
@@ -152,25 +163,60 @@ export default function CalendarScreen() {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Mood calendar</Text>
-        <View style={styles.streakBadge}>
-          <Text style={styles.streakText}>🔥 {streak || 0} day streak</Text>
+    <View style={styles.container}>
+      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+        <View style={styles.header}>
+          <Text style={styles.title}>Mood calendar</Text>
+          <View style={styles.streakBadge}>
+            <Text style={styles.streakText}>🔥 {streak || 0} day streak</Text>
+          </View>
         </View>
-      </View>
 
-      {!!error && <Text style={styles.errorText}>{error}</Text>}
+        {!!error && <Text style={styles.errorText}>{error}</Text>}
 
-      {months.map(({ month, year }) => (
-        <MonthGrid
-          key={`${year}-${month}`}
-          month={month}
-          year={year}
-          entriesByDate={entriesByDate}
-        />
-      ))}
-    </ScrollView>
+        {months.map(({ month, year }) => (
+          <MonthGrid
+            key={`${year}-${month}`}
+            month={month}
+            year={year}
+            entriesByDate={entriesByDate}
+            onOpenEntry={setSelectedEntry}
+          />
+        ))}
+      </ScrollView>
+
+      <Modal
+        visible={Boolean(selectedEntry)}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setSelectedEntry(null)}
+      >
+        <View style={styles.modalBackdrop}>
+          <TouchableOpacity
+            style={styles.closeArea}
+            activeOpacity={1}
+            onPress={() => setSelectedEntry(null)}
+          />
+          <View style={styles.modalCard}>
+            {selectedEntry && (
+              <>
+                <Image
+                  source={{ uri: selectedEntry.imageUrl }}
+                  style={styles.modalImage}
+                  resizeMode="contain"
+                />
+                <Text style={styles.modalTitle}>
+                  {getMoodMeta(selectedEntry.mood).emoji} {selectedEntry.mood}
+                </Text>
+                <Text style={styles.modalMeta}>
+                  {selectedEntry.date} · {formatUploadTime(selectedEntry.createdAt)}
+                </Text>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
+    </View>
   );
 }
 
@@ -269,5 +315,38 @@ const styles = StyleSheet.create({
   },
   moodEmoji: {
     fontSize: 16,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.9)",
+    justifyContent: "center",
+    padding: 18,
+  },
+  closeArea: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  modalCard: {
+    backgroundColor: "#111",
+    borderRadius: 30,
+    padding: 14,
+  },
+  modalImage: {
+    width: "100%",
+    height: 440,
+    maxHeight: "72%",
+    borderRadius: 24,
+    backgroundColor: "#050505",
+  },
+  modalTitle: {
+    color: "#fff",
+    fontSize: 24,
+    fontWeight: "900",
+    marginTop: 16,
+  },
+  modalMeta: {
+    color: "#aaa",
+    fontSize: 14,
+    fontWeight: "800",
+    marginTop: 4,
   },
 });

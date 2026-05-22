@@ -3,6 +3,9 @@ import { supabase } from "../config/supabase";
 type SnapRecord = {
   id: string;
   mood: string;
+  image_url: string;
+  image_public_id?: string | null;
+  cloudinary_public_id?: string | null;
   created_at: string;
 };
 
@@ -13,7 +16,7 @@ const toLocalDateKey = (dateValue: string) => {
 export const getMoodCalendar = async (userId: string) => {
   const { data: snaps, error } = await supabase
     .from("moodsnap")
-    .select("id, mood, created_at")
+    .select("id, mood, image_url, image_public_id, cloudinary_public_id, created_at")
     .eq("user_id", userId)
     .order("created_at", { ascending: true });
 
@@ -36,6 +39,8 @@ export const getMoodCalendar = async (userId: string) => {
     date,
     mood: snap.mood,
     snapId: snap.id,
+    imageUrl: snap.image_url,
+    imagePublicId: snap.cloudinary_public_id || snap.image_public_id || null,
     createdAt: snap.created_at,
   }));
 

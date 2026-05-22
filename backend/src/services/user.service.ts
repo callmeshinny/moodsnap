@@ -1,11 +1,13 @@
 import { supabase } from "../config/supabase";
 import cloudinary from "../config/cloudinary";
+import { uploadImageToCloudinary } from "./upload.service";
 
 export type UserRecord = {
   id: string;
   username: string;
   email: string;
   avatar_url?: string | null;
+  avatar_public_id?: string | null;
   timezone?: string | null;
   calendar_mode?: string | null;
   is_verified?: boolean;
@@ -24,6 +26,7 @@ export const mapUser = (user: UserRecord) => ({
   username: user.username,
   email: user.email,
   avatarUrl: user.avatar_url || null,
+  avatarPublicId: user.avatar_public_id || null,
   timezone: user.timezone || null,
   calendarMode: user.calendar_mode || null,
   isVerified: Boolean(user.is_verified),
@@ -34,7 +37,7 @@ export const mapUser = (user: UserRecord) => ({
 export const getUserById = async (userId: string) => {
   const { data: user, error } = await supabase
     .from("users")
-    .select("id, username, email, avatar_url, timezone, calendar_mode, is_verified, created_at, updated_at")
+    .select("id, username, email, avatar_url, avatar_public_id, timezone, calendar_mode, is_verified, created_at, updated_at")
     .eq("id", userId)
     .single();
 
@@ -48,7 +51,7 @@ export const getUserById = async (userId: string) => {
 export const getUserByUsername = async (username: string) => {
   const { data: user, error } = await supabase
     .from("users")
-    .select("id, username, email, avatar_url, timezone, calendar_mode, is_verified, created_at, updated_at")
+    .select("id, username, email, avatar_url, avatar_public_id, timezone, calendar_mode, is_verified, created_at, updated_at")
     .eq("username", username)
     .maybeSingle();
 
@@ -74,7 +77,7 @@ export const updateUserProfile = async (
       updated_at: new Date().toISOString(),
     })
     .eq("id", userId)
-    .select("id, username, email, avatar_url, timezone, calendar_mode, is_verified, created_at, updated_at")
+    .select("id, username, email, avatar_url, avatar_public_id, timezone, calendar_mode, is_verified, created_at, updated_at")
     .single();
 
   if (error) {
@@ -93,7 +96,7 @@ export const getUsersByIds = async (userIds: string[]) => {
 
   const { data: users, error } = await supabase
     .from("users")
-    .select("id, username, email, avatar_url, timezone, calendar_mode, is_verified, created_at, updated_at")
+    .select("id, username, email, avatar_url, avatar_public_id, timezone, calendar_mode, is_verified, created_at, updated_at")
     .in("id", uniqueIds);
 
   if (error) {
@@ -109,12 +112,50 @@ export const getUsersByIds = async (userIds: string[]) => {
   return userMap;
 };
 
+export const updateUserProfilePhoto = async (
+  userId: string,
+  fileBuffer: Buffer
+) => {
+  const currentUser = await getUserById(userId);
+  const uploadedImage = await uploadImageToCloudinary(
+    fileBuffer,
+    "moodsnap/profile_photos"
+  );
+
+  const { data: user, error } = await supabase
+    .from("users")
+    .update({
+      avatar_url: uploadedImage.secure_url,
+      avatar_public_id: uploadedImage.public_id,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", userId)
+    .select("id, username, email, avatar_url, avatar_public_id, timezone, calendar_mode, is_verified, created_at, updated_at")
+    .single();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  if (currentUser.avatarPublicId) {
+    await cloudinary.uploader
+      .destroy(currentUser.avatarPublicId)
+      .catch(() => null);
+  }
+
+  return mapUser(user);
+};
+
 export const deleteUserAccount = async (userId: string) => {
   const user = await getUserById(userId);
 
+  if (user.avatarPublicId) {
+    await cloudinary.uploader.destroy(user.avatarPublicId).catch(() => null);
+  }
+
   const { data: snaps, error: snapsError } = await supabase
     .from("moodsnap")
-    .select("image_public_id")
+    .select("image_public_id, cloudinary_public_id")
     .eq("user_id", userId);
 
   if (snapsError) {
@@ -122,8 +163,10 @@ export const deleteUserAccount = async (userId: string) => {
   }
 
   for (const snap of snaps || []) {
-    if (snap.image_public_id) {
-      await cloudinary.uploader.destroy(snap.image_public_id).catch(() => null);
+    const publicId = snap.cloudinary_public_id || snap.image_public_id;
+
+    if (publicId) {
+      await cloudinary.uploader.destroy(publicId).catch(() => null);
     }
   }
 

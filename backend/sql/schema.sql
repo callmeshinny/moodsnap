@@ -6,6 +6,7 @@ create table if not exists public.users (
   email text not null unique,
   password_hash text not null,
   avatar_url text,
+  avatar_public_id text,
   timezone text default 'Asia/Ho_Chi_Minh',
   calendar_mode text default 'month',
   is_verified boolean not null default false,
@@ -39,6 +40,9 @@ alter table public.moodsnap
 
 alter table public.moodsnap
   add column if not exists cloudinary_public_id text;
+
+alter table public.users
+  add column if not exists avatar_public_id text;
 
 create table if not exists public.friendships (
   id uuid primary key default gen_random_uuid(),

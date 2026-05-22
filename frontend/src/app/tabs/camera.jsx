@@ -44,6 +44,7 @@ export default function CameraScreen() {
 
       const photo = await cameraRef.current?.takePictureAsync({
         quality: 0.85,
+        mirror: cameraFacing === "front",
       });
 
       if (!photo?.uri) {
@@ -146,6 +147,7 @@ export default function CameraScreen() {
               ref={cameraRef}
               style={styles.camera}
               facing={cameraFacing}
+              mirror={cameraFacing === "front"}
             />
             <TouchableOpacity
               style={styles.flipButton}

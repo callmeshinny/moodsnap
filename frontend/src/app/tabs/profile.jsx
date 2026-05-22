@@ -1,6 +1,7 @@
 import React, { useContext, useEffect, useState } from "react";
 import {
   Alert,
+  Image,
   Modal,
   ScrollView,
   Share,
@@ -10,6 +11,8 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import * as Clipboard from "expo-clipboard";
+import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
 import {
   acceptFriendRequestApi,
@@ -59,10 +62,15 @@ export default function ProfileScreen() {
     refreshAppData,
     refreshFriendLink,
     updateUser,
+    updateProfilePhoto,
   } = useContext(AuthContext);
   const [isEditingName, setIsEditingName] = useState(false);
   const [draftName, setDraftName] = useState(user?.username || "");
   const [savingName, setSavingName] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [ratingModalVisible, setRatingModalVisible] = useState(false);
+  const [termsVisible, setTermsVisible] = useState(false);
+  const [selectedRating, setSelectedRating] = useState(0);
   const [friendRequests, setFriendRequests] = useState([]);
 
   useEffect(() => {
@@ -88,15 +96,77 @@ export default function ProfileScreen() {
     ]);
   };
 
-  const handleCopyFriendLink = async () => {
+  const getInviteMessage = (link) =>
+    `Add me on MoodSnap ${link} then share our mood`;
+
+  const getFriendLink = async () => {
     const link = friendLink || (await refreshFriendLink?.());
 
     if (!link) {
       Alert.alert("Friend link unavailable", "Please try again in a moment.");
+      return null;
+    }
+
+    return link;
+  };
+
+  const handleCopyFriendLink = async () => {
+    const link = await getFriendLink();
+
+    if (!link) {
       return;
     }
 
-    await Share.share({ message: link });
+    await Clipboard.setStringAsync(getInviteMessage(link));
+    Alert.alert("Copied", "Your MoodSnap invite is ready to paste.");
+  };
+
+  const handleShareFriendLink = async () => {
+    const link = await getFriendLink();
+
+    if (!link) {
+      return;
+    }
+
+    await Share.share({ message: getInviteMessage(link) });
+  };
+
+  const handleEditProfilePhoto = async () => {
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+      if (!permission.granted) {
+        Alert.alert(
+          "Photo permission required",
+          "Please allow photo access to update your profile photo."
+        );
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: "images",
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.85,
+      });
+
+      if (result.canceled || !result.assets?.[0]?.uri) {
+        return;
+      }
+
+      setUploadingPhoto(true);
+      await updateProfilePhoto?.(result.assets[0].uri);
+      Alert.alert("Profile photo updated", "Your new photo is live.");
+    } catch (error) {
+      Alert.alert(
+        "Upload failed",
+        error instanceof Error
+          ? error.message
+          : "Could not update your profile photo."
+      );
+    } finally {
+      setUploadingPhoto(false);
+    }
   };
 
   const handleDeleteAccount = async () => {
@@ -180,6 +250,12 @@ export default function ProfileScreen() {
     Alert.alert(label, "This setting will be connected later.");
   };
 
+  const handleRateMoodSnap = (rating) => {
+    setSelectedRating(rating);
+    setRatingModalVisible(false);
+    Alert.alert("Thanks for rating", `You rated MoodSnap ${rating}/5 stars.`);
+  };
+
   const displayName = user?.username || "MoodSnap user";
 
   return (
@@ -189,9 +265,18 @@ export default function ProfileScreen() {
       <View style={styles.profileHeader}>
         <View style={styles.avatarOuter}>
           <View style={styles.avatarInner}>
-            <Text style={styles.avatarInitial}>
-              {displayName[0]?.toUpperCase() || "M"}
-            </Text>
+            {user?.avatarUrl ? (
+              <Image source={{ uri: user.avatarUrl }} style={styles.avatarImage} />
+            ) : (
+              <Text style={styles.avatarInitial}>
+                {displayName[0]?.toUpperCase() || "M"}
+              </Text>
+            )}
+            {uploadingPhoto && (
+              <View style={styles.avatarOverlay}>
+                <Text style={styles.avatarOverlayText}>Uploading</Text>
+              </View>
+            )}
           </View>
         </View>
 
@@ -210,7 +295,7 @@ export default function ProfileScreen() {
 
           <TouchableOpacity
             style={styles.quickButton}
-            onPress={handleCopyFriendLink}
+            onPress={handleShareFriendLink}
             activeOpacity={0.8}
           >
             <Text style={styles.quickIcon}>📤</Text>
@@ -228,12 +313,14 @@ export default function ProfileScreen() {
         <SettingRow
           icon="👤"
           label="Edit profile photo"
-          onPress={() => handleComingSoon("Edit profile photo")}
+          onPress={handleEditProfilePhoto}
         />
         <SettingRow
           icon="✉️"
           label="Email address"
-          onPress={() => handleComingSoon("Email address")}
+          onPress={() =>
+            Alert.alert("Email address", user?.email || "No email available.")
+          }
         />
       </Section>
 
@@ -272,7 +359,24 @@ export default function ProfileScreen() {
             key={item.label}
             icon={item.icon}
             label={item.label}
-            onPress={() => handleComingSoon(item.label)}
+            onPress={() => {
+              if (item.label === "Rate MoodSnap") {
+                setRatingModalVisible(true);
+                return;
+              }
+
+              if (item.label === "Share MoodSnap") {
+                handleShareFriendLink();
+                return;
+              }
+
+              if (item.label === "Terms of Service") {
+                setTermsVisible(true);
+                return;
+              }
+
+              handleComingSoon(item.label);
+            }}
           />
         ))}
       </Section>
@@ -321,6 +425,91 @@ export default function ProfileScreen() {
           </View>
         </View>
       </Modal>
+
+      <Modal
+        visible={ratingModalVisible}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setRatingModalVisible(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Rate MoodSnap</Text>
+            <Text style={styles.modalBody}>
+              How does MoodSnap feel today?
+            </Text>
+            <View style={styles.starRow}>
+              {[1, 2, 3, 4, 5].map((rating) => (
+                <TouchableOpacity
+                  key={rating}
+                  style={styles.starButton}
+                  onPress={() => handleRateMoodSnap(rating)}
+                  activeOpacity={0.72}
+                >
+                  <Text
+                    style={[
+                      styles.starText,
+                      rating <= selectedRating && styles.starTextSelected,
+                    ]}
+                  >
+                    ★
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <TouchableOpacity
+              style={styles.fullCancelButton}
+              onPress={() => setRatingModalVisible(false)}
+            >
+              <Text style={styles.cancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={termsVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setTermsVisible(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.termsCard}>
+            <Text style={styles.modalTitle}>Terms of Service</Text>
+            <ScrollView style={styles.termsScroll}>
+              <Text style={styles.termsText}>
+                Welcome to MoodSnap. MoodSnap is for sharing real mood moments
+                with people you choose.
+              </Text>
+              <Text style={styles.termsText}>
+                Be kind. Post only photos you have the right to share. Do not
+                harass, impersonate, spam, scrape, or use MoodSnap for anything
+                illegal or unsafe.
+              </Text>
+              <Text style={styles.termsText}>
+                You own your photos, profile, and mood posts. You give MoodSnap
+                permission to host, process, and show that content so the app can
+                work for you and your friends.
+              </Text>
+              <Text style={styles.termsText}>
+                We may remove content or accounts that break these terms, hurt
+                other people, or put the service at risk. MoodSnap is provided
+                as is, and some features may change as the app grows.
+              </Text>
+              <Text style={styles.termsText}>
+                By using MoodSnap, you agree to keep the space honest, private,
+                and fun for the people you add.
+              </Text>
+            </ScrollView>
+            <TouchableOpacity
+              style={styles.doneButton}
+              onPress={() => setTermsVisible(false)}
+            >
+              <Text style={styles.saveText}>Done</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -364,6 +553,22 @@ const styles = StyleSheet.create({
     backgroundColor: "#2b2b2b",
     justifyContent: "center",
     alignItems: "center",
+    overflow: "hidden",
+  },
+  avatarImage: {
+    width: "100%",
+    height: "100%",
+  },
+  avatarOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.62)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  avatarOverlayText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "900",
   },
   avatarInitial: {
     color: "#fff",
@@ -526,6 +731,12 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     marginBottom: 14,
   },
+  modalBody: {
+    color: "#aaa",
+    fontSize: 15,
+    fontWeight: "800",
+    lineHeight: 21,
+  },
   nameInput: {
     backgroundColor: "#222",
     borderRadius: 18,
@@ -551,6 +762,13 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontWeight: "900",
   },
+  fullCancelButton: {
+    borderRadius: 18,
+    paddingVertical: 14,
+    backgroundColor: "#292929",
+    alignItems: "center",
+    marginTop: 18,
+  },
   saveButton: {
     flex: 1,
     borderRadius: 18,
@@ -561,5 +779,48 @@ const styles = StyleSheet.create({
   saveText: {
     color: "#fff",
     fontWeight: "900",
+  },
+  doneButton: {
+    borderRadius: 18,
+    paddingVertical: 14,
+    backgroundColor: COLORS.primary,
+    alignItems: "center",
+  },
+  starRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 18,
+  },
+  starButton: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#242424",
+  },
+  starText: {
+    color: "#777",
+    fontSize: 30,
+    fontWeight: "900",
+  },
+  starTextSelected: {
+    color: COLORS.primary,
+  },
+  termsCard: {
+    backgroundColor: "#151515",
+    borderRadius: 28,
+    padding: 20,
+    maxHeight: "82%",
+  },
+  termsScroll: {
+    marginBottom: 18,
+  },
+  termsText: {
+    color: "#d9d9d9",
+    fontSize: 15,
+    fontWeight: "700",
+    lineHeight: 22,
+    marginBottom: 14,
   },
 });
