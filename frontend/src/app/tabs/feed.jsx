@@ -43,7 +43,7 @@ function FeedCard({ item, onOpen }) {
 
   return (
     <TouchableOpacity
-      style={[styles.card, { aspectRatio: item.aspectRatio || 3 / 4 }]}
+      style={[styles.card, { aspectRatio: 5 / 3 }]}
       onPress={() => onOpen(item)}
       activeOpacity={0.9}
     >

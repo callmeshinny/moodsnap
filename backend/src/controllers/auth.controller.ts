@@ -1,6 +1,8 @@
 import { Request, Response } from "express";
 import {
+  forgotPasswordService,
   resendOtpService,
+  resetPasswordService,
   signInService,
   signUpService,
   verifyOtpService
@@ -93,3 +95,49 @@ export const resendOtp = async (
     });
   }
 };
+
+
+export const forgotPassword = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const result = await forgotPasswordService(req.body);
+
+    res.status(200).json({
+      success: true,
+      ...result
+    });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to send reset OTP";
+
+    res.status(400).json({
+      success: false,
+      message
+    });
+  }
+};
+
+export const resetPassword = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const result = await resetPasswordService(req.body);
+
+    res.status(200).json({
+      success: true,
+      ...result
+    });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to reset password";
+
+    res.status(400).json({
+      success: false,
+      message
+    });
+  }
+};
+

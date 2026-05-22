@@ -99,7 +99,7 @@ export const updateUserProfile = async (
       .from("users")
       .update(fallbackUpdates)
       .eq("id", userId)
-      .select("id, username, email, avatar_url, avatar_public_id, timezone, calendar_mode, is_verified, created_at, updated_at")
+      .select("id, username, email, avatar_url, avatar_public_id, profile_color, timezone, calendar_mode, is_verified, created_at, updated_at")
       .single();
 
     user = fallback.data as any;

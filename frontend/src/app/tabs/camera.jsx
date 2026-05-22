@@ -4,6 +4,7 @@ import {
   Alert,
   Image,
   Keyboard,
+  Modal,
   StyleSheet,
   Text,
   TextInput,
@@ -13,12 +14,20 @@ import {
 } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { createSnapApi } from "../../api/snapApi";
+import { sendFriendRequestApi } from "../../api/friendApi";
 import { AuthContext } from "../../context/AuthContext";
 import { COLORS } from "../../constants/colors";
 import { moodOptions } from "../../utils/moods";
 
 export default function CameraScreen() {
-  const { refreshFeed, refreshStreak, streak } = useContext(AuthContext);
+  const {
+    friendCount,
+    refreshAppData,
+    refreshFeed,
+    refreshFriendCount,
+    refreshStreak,
+    streak,
+  } = useContext(AuthContext);
   const cameraRef = useRef(null);
   const [permission, requestPermission] = useCameraPermissions();
   const [hasCaptured, setHasCaptured] = useState(false);
@@ -27,9 +36,80 @@ export default function CameraScreen() {
   const [caption, setCaption] = useState("");
   const [posting, setPosting] = useState(false);
   const [cameraFacing, setCameraFacing] = useState("back");
+  const [friendModalVisible, setFriendModalVisible] = useState(false);
+  const [friendLinkInput, setFriendLinkInput] = useState("");
+  const [sendingFriendRequest, setSendingFriendRequest] = useState(false);
+  const [friendModalVisible, setFriendModalVisible] = useState(false);
+  const [friendLinkInput, setFriendLinkInput] = useState("");
+  const [sendingFriendRequest, setSendingFriendRequest] = useState(false);
 
   const handleFlipCamera = () => {
     setCameraFacing((current) => (current === "back" ? "front" : "back"));
+  };
+
+
+  const extractFriendIdentifier = (value) => {
+    const raw = String(value || "").trim();
+
+    if (!raw) {
+      return "";
+    }
+
+    const withoutQuery = raw.split("?")[0].split("#")[0];
+    const cleaned = withoutQuery.replace(/\/$/, "");
+    const parts = cleaned.split("/").filter(Boolean);
+    const lastPart = parts[parts.length - 1];
+
+    if (
+      cleaned.includes("moodsnap.cam/") ||
+      cleaned.includes("moodsnap-92ps.onrender.com/friend/") ||
+      cleaned.includes("moodsnap://friend/") ||
+      cleaned.includes("frontend://friend/")
+    ) {
+      return decodeURIComponent(lastPart || "").trim();
+    }
+
+    return raw.replace(/^@/, "").trim();
+  };
+
+  const handleOpenAddFriend = () => {
+    setFriendLinkInput("");
+    setFriendModalVisible(true);
+  };
+
+  const handleSubmitFriendLink = async () => {
+    const receiverId = extractFriendIdentifier(friendLinkInput);
+
+    if (!receiverId) {
+      Alert.alert("Friend link required", "Paste a MoodSnap link or username.");
+      return;
+    }
+
+    try {
+      setSendingFriendRequest(true);
+      await sendFriendRequestApi(receiverId);
+      await Promise.allSettled([
+        refreshFriendCount?.(),
+        refreshAppData?.(),
+      ]);
+
+      setFriendModalVisible(false);
+      setFriendLinkInput("");
+
+      Alert.alert(
+        "Friend request sent",
+        `${receiverId} will see your request in their profile.`
+      );
+    } catch (error) {
+      Alert.alert(
+        "Could not send request",
+        error.response?.data?.message ||
+          error.message ||
+          "Please check the link and try again."
+      );
+    } finally {
+      setSendingFriendRequest(false);
+    }
   };
 
   const handleCapture = async () => {
@@ -146,8 +226,19 @@ export default function CameraScreen() {
       >
         <View style={styles.logoRow}>
           <Text style={styles.logo}>MoodSnap</Text>
-          <View style={styles.streakBadge}>
-            <Text style={styles.streakText}>🔥 {streak || 0}</Text>
+
+          <View style={styles.topBadgeRow}>
+            <TouchableOpacity
+              style={styles.friendCountBadge}
+              onPress={handleOpenAddFriend}
+              activeOpacity={0.82}
+            >
+              <Text style={styles.friendCountText}>👥 {friendCount || 0}</Text>
+            </TouchableOpacity>
+
+            <View style={styles.streakBadge}>
+              <Text style={styles.streakText}>🔥 {streak || 0}</Text>
+            </View>
           </View>
         </View>
 
@@ -246,6 +337,56 @@ export default function CameraScreen() {
           </View>
         </>
       )}
+
+      <Modal
+        visible={friendModalVisible}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setFriendModalVisible(false)}
+      >
+        <View style={styles.friendModalBackdrop}>
+          <View style={styles.friendModalCard}>
+            <Text style={styles.friendModalTitle}>Add friend</Text>
+            <Text style={styles.friendModalBody}>
+              Paste a MoodSnap link or enter a username.
+            </Text>
+
+            <TextInput
+              style={styles.friendInput}
+              value={friendLinkInput}
+              onChangeText={setFriendLinkInput}
+              placeholder="moodsnap.cam/username"
+              placeholderTextColor="#777"
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+
+            <View style={styles.friendModalActions}>
+              <TouchableOpacity
+                style={styles.friendCancelButton}
+                onPress={() => setFriendModalVisible(false)}
+                disabled={sendingFriendRequest}
+              >
+                <Text style={styles.friendCancelText}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.friendSendButton,
+                  sendingFriendRequest && styles.disabledButton,
+                ]}
+                onPress={handleSubmitFriendLink}
+                disabled={sendingFriendRequest}
+              >
+                <Text style={styles.friendSendText}>
+                  {sendingFriendRequest ? "Sending..." : "Send"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       </View>
     </TouchableWithoutFeedback>
   );
@@ -472,6 +613,86 @@ const styles = StyleSheet.create({
   permissionButtonText: {
     color: "#fff",
     fontSize: 16,
+    fontWeight: "900",
+  },
+
+  topBadgeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  friendCountBadge: {
+    backgroundColor: "rgba(0,0,0,0.56)",
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  friendCountText: {
+    color: "#fff",
+    fontWeight: "900",
+  },
+  friendModalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.78)",
+    justifyContent: "center",
+    padding: 22,
+  },
+  friendModalCard: {
+    backgroundColor: "#151515",
+    borderRadius: 28,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: "#242424",
+  },
+  friendModalTitle: {
+    color: "#fff",
+    fontSize: 26,
+    fontWeight: "900",
+  },
+  friendModalBody: {
+    color: "#aaa",
+    fontSize: 14,
+    fontWeight: "800",
+    lineHeight: 20,
+    marginTop: 8,
+    marginBottom: 14,
+  },
+  friendInput: {
+    backgroundColor: "#222",
+    borderRadius: 18,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "800",
+    borderWidth: 1,
+    borderColor: "#333",
+  },
+  friendModalActions: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 18,
+  },
+  friendCancelButton: {
+    flex: 1,
+    borderRadius: 18,
+    paddingVertical: 14,
+    backgroundColor: "#292929",
+    alignItems: "center",
+  },
+  friendSendButton: {
+    flex: 1,
+    borderRadius: 18,
+    paddingVertical: 14,
+    backgroundColor: COLORS.primary,
+    alignItems: "center",
+  },
+  friendCancelText: {
+    color: "#fff",
+    fontWeight: "900",
+  },
+  friendSendText: {
+    color: "#fff",
     fontWeight: "900",
   },
 });

@@ -2,6 +2,7 @@ import React, { useContext, useEffect, useState } from "react";
 import {
   Alert,
   Image,
+  Linking,
   Modal,
   ScrollView,
   Share,
@@ -19,6 +20,7 @@ import {
   getFriendRequestsApi,
   getFriendsApi,
   rejectFriendRequestApi,
+  sendFriendRequestApi,
 } from "../../api/friendApi";
 import { deleteMeApi } from "../../api/userApi";
 import { AuthContext } from "../../context/AuthContext";
@@ -78,6 +80,8 @@ export default function ProfileScreen() {
   const [friendsVisible, setFriendsVisible] = useState(false);
   const [friends, setFriends] = useState([]);
   const [loadingFriends, setLoadingFriends] = useState(false);
+  const [friendLinkInput, setFriendLinkInput] = useState("");
+  const [sendingFriendRequest, setSendingFriendRequest] = useState(false);
 
   useEffect(() => {
     refreshAppData?.();
@@ -112,6 +116,20 @@ export default function ProfileScreen() {
     }
 
     return realFriendLink;
+  };
+
+
+  const handleOpenFriendLink = async () => {
+    if (!realFriendLink) {
+      Alert.alert("Friend link unavailable", "Please try again in a moment.");
+      return;
+    }
+
+    try {
+      await Linking.openURL(realFriendLink);
+    } catch {
+      Alert.alert("Could not open link", realFriendLink);
+    }
   };
 
   const handleCopyFriendLink = async () => {
@@ -262,6 +280,66 @@ export default function ProfileScreen() {
     }
   };
 
+
+  const extractFriendIdentifier = (value) => {
+    const raw = String(value || "").trim();
+
+    if (!raw) {
+      return "";
+    }
+
+    const withoutQuery = raw.split("?")[0].split("#")[0];
+    const cleaned = withoutQuery.replace(/\/$/, "");
+    const parts = cleaned.split("/").filter(Boolean);
+    const lastPart = parts[parts.length - 1];
+
+    if (
+      cleaned.includes("moodsnap.cam/") ||
+      cleaned.includes("moodsnap-92ps.onrender.com/friend/") ||
+      cleaned.includes("moodsnap://friend/") ||
+      cleaned.includes("frontend://friend/")
+    ) {
+      return decodeURIComponent(lastPart || "").trim();
+    }
+
+    return raw.replace(/^@/, "").trim();
+  };
+
+  const handleSubmitFriendLink = async () => {
+    const receiverId = extractFriendIdentifier(friendLinkInput);
+
+    if (!receiverId) {
+      Alert.alert("Friend link required", "Paste a MoodSnap link or username.");
+      return;
+    }
+
+    try {
+      setSendingFriendRequest(true);
+      await sendFriendRequestApi(receiverId);
+      await Promise.allSettled([
+        refreshAppData?.(),
+        loadFriendRequests(),
+        handleOpenFriends(),
+      ]);
+
+      setFriendLinkInput("");
+
+      Alert.alert(
+        "Friend request sent",
+        `${receiverId} will see your request in their profile.`
+      );
+    } catch (error) {
+      Alert.alert(
+        "Could not send request",
+        error.response?.data?.message ||
+          error.message ||
+          "Please check the link and try again."
+      );
+    } finally {
+      setSendingFriendRequest(false);
+    }
+  };
+
   const handleOpenFriends = async () => {
     try {
       setFriendsVisible(true);
@@ -350,7 +428,7 @@ export default function ProfileScreen() {
         </TouchableOpacity>
 
         <Text style={styles.name}>{displayName}</Text>
-        <TouchableOpacity onPress={handleCopyFriendLink} activeOpacity={0.75}>
+        <TouchableOpacity onPress={handleOpenFriendLink} activeOpacity={0.75}>
           <Text style={styles.link}>
             {displayFriendLink}
           </Text>
@@ -525,6 +603,31 @@ export default function ProfileScreen() {
                 activeOpacity={0.75}
               >
                 <Text style={styles.closeButtonText}>×</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.addFriendBox}>
+              <TextInput
+                style={styles.addFriendInput}
+                value={friendLinkInput}
+                onChangeText={setFriendLinkInput}
+                placeholder="Paste link or username"
+                placeholderTextColor="#777"
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              <TouchableOpacity
+                style={[
+                  styles.addFriendButton,
+                  sendingFriendRequest && styles.disabledButton,
+                ]}
+                onPress={handleSubmitFriendLink}
+                disabled={sendingFriendRequest}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.addFriendButtonText}>
+                  {sendingFriendRequest ? "..." : "Send"}
+                </Text>
               </TouchableOpacity>
             </View>
 
@@ -805,11 +908,16 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
   link: {
-    color: "#969696",
-    fontSize: 13,
-    fontWeight: "800",
+    color: COLORS.primary,
+    fontSize: 14,
+    fontWeight: "900",
     marginTop: 8,
     textAlign: "center",
+    backgroundColor: "rgba(246,80,120,0.12)",
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 999,
+    overflow: "hidden",
   },
   quickRow: {
     flexDirection: "row",
@@ -1141,5 +1249,35 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     lineHeight: 22,
     paddingVertical: 18,
+  },
+  addFriendBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginTop: 4,
+    marginBottom: 14,
+  },
+  addFriendInput: {
+    flex: 1,
+    backgroundColor: "#222",
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "800",
+    borderWidth: 1,
+    borderColor: "#333",
+  },
+  addFriendButton: {
+    backgroundColor: COLORS.primary,
+    borderRadius: 18,
+    paddingHorizontal: 16,
+    paddingVertical: 13,
+  },
+  addFriendButtonText: {
+    color: "#fff",
+    fontWeight: "900",
+    fontSize: 13,
   },
 });
