@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { uploadImageToCloudinary } from "../services/upload.service";
 import { supabase } from "../config/supabase";
 import { getUsersByIds, isUuid } from "../services/user.service";
+import { getVisibleSnapUserIds } from "../services/friend.service";
 
 const TABLE_NAME = "moodsnap";
 
@@ -81,11 +82,24 @@ export const createSnap = async (req: Request, res: Response): Promise<void> => 
   }
 };
 
-export const getSnaps = async (_req: Request, res: Response): Promise<void> => {
+export const getSnaps = async (req: Request, res: Response): Promise<void> => {
   try {
+    const userId = req.user?.id;
+
+    if (!userId) {
+      res.status(401).json({
+        success: false,
+        message: "Authentication is required",
+      });
+      return;
+    }
+
+    const visibleUserIds = await getVisibleSnapUserIds(userId);
+
     const { data: snaps, error } = await supabase
       .from(TABLE_NAME)
       .select("*")
+      .in("user_id", visibleUserIds)
       .order("created_at", { ascending: false })
       .limit(50);
 
@@ -93,9 +107,14 @@ export const getSnaps = async (_req: Request, res: Response): Promise<void> => {
       throw new Error(error.message);
     }
 
+    const rows = (snaps || []).filter((snap) => isUuid(String(snap.user_id)));
+    const usersById = await getUsersByIds(rows.map((snap) => String(snap.user_id)));
+
     res.status(200).json({
       success: true,
-      snaps: (snaps || []).map((snap) => mapSnap(snap)),
+      snaps: rows.map((snap) =>
+        mapSnap(snap, usersById.get(String(snap.user_id)) || null)
+      ),
     });
   } catch (error) {
     const message =
@@ -119,9 +138,22 @@ export const getFeed = async (req: Request, res: Response): Promise<void> => {
         ? req.query.cursor.trim()
         : null;
 
+    const userId = req.user?.id;
+
+    if (!userId) {
+      res.status(401).json({
+        success: false,
+        message: "Authentication is required",
+      });
+      return;
+    }
+
+    const visibleUserIds = await getVisibleSnapUserIds(userId);
+
     let query = supabase
       .from(TABLE_NAME)
       .select("*")
+      .in("user_id", visibleUserIds)
       .order("created_at", { ascending: false })
       .limit(limit + 1);
 

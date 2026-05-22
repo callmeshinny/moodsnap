@@ -77,3 +77,28 @@ test.png
 frontend/ios-device-log.txt
 *.log
 *.txt.log
+
+# Expo / EAS local files
+.eas/
+eas.json.local
+expo-env.d.ts
+
+# Local mobile builds
+*.apk
+*.aab
+*.ipa
+
+# Local env variants
+.env.local
+.env.development.local
+.env.production.local
+
+# Local debug screenshots / recordings
+*.heic
+*.mov
+*.mp4
+screenshots/
+recordings/
+
+# IDE
+.idea/

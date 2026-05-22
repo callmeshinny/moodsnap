@@ -2,7 +2,15 @@ import { API_BASE_URL } from "../constants/config";
 import { getToken } from "../storage/tokenStorage";
 
 export const getSnapsApi = async () => {
-  const response = await fetch(`${API_BASE_URL}/snaps`);
+  const token = await getToken();
+
+  const response = await fetch(`${API_BASE_URL}/snaps`, {
+    headers: token
+      ? {
+          Authorization: `Bearer ${token}`,
+        }
+      : undefined,
+  });
   const data = await response.json();
 
   if (!response.ok) {

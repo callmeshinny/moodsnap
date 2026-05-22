@@ -44,7 +44,7 @@ export default function CameraScreen() {
 
       const photo = await cameraRef.current?.takePictureAsync({
         quality: 0.85,
-        mirror: cameraFacing === "front",
+        mirror: false,
       });
 
       if (!photo?.uri) {

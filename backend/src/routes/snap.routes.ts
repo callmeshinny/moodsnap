@@ -10,7 +10,7 @@ import { upload } from "../middlewares/upload.middleware";
 
 const router = Router();
 
-router.get("/", getSnaps);
+router.get("/", authMiddleware, getSnaps);
 router.get("/feed", authMiddleware, getFeed);
 router.post("/", authMiddleware, upload.single("image"), createSnap);
 router.delete("/:id", authMiddleware, deleteSnap);

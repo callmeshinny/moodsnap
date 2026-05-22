@@ -216,6 +216,32 @@ export const rejectFriendRequest = async (
   return mapFriendship(rejected);
 };
 
+
+export const areAcceptedFriends = async (
+  firstUserId: string,
+  secondUserId: string
+): Promise<boolean> => {
+  if (firstUserId === secondUserId) {
+    return true;
+  }
+
+  const [userOneId, userTwoId] = orderedPair(firstUserId, secondUserId);
+
+  const { data, error } = await supabase
+    .from("friendships")
+    .select("id")
+    .eq("user_one_id", userOneId)
+    .eq("user_two_id", userTwoId)
+    .eq("status", "accepted")
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return Boolean(data);
+};
+
 export const getFriendCount = async (userId: string) => {
   const { count, error } = await supabase
     .from("friendships")
@@ -252,6 +278,31 @@ export const getAcceptedFriends = async (userId: string) => {
   return friendIds
     .map((friendId) => usersById.get(friendId))
     .filter(Boolean);
+};
+
+export const getAcceptedFriendIds = async (userId: string): Promise<string[]> => {
+  const { data: friendships, error } = await supabase
+    .from("friendships")
+    .select("user_one_id, user_two_id")
+    .eq("status", "accepted")
+    .or(`user_one_id.eq.${userId},user_two_id.eq.${userId}`);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return (friendships || [])
+    .map((friendship) =>
+      friendship.user_one_id === userId
+        ? friendship.user_two_id
+        : friendship.user_one_id
+    )
+    .filter(Boolean);
+};
+
+export const getVisibleSnapUserIds = async (userId: string): Promise<string[]> => {
+  const friendIds = await getAcceptedFriendIds(userId);
+  return Array.from(new Set([userId, ...friendIds]));
 };
 
 export const getPendingFriendRequests = async (userId: string) => {

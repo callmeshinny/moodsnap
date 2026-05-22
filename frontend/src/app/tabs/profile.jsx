@@ -17,6 +17,7 @@ import { router } from "expo-router";
 import {
   acceptFriendRequestApi,
   getFriendRequestsApi,
+  getFriendsApi,
   rejectFriendRequestApi,
 } from "../../api/friendApi";
 import { deleteMeApi } from "../../api/userApi";
@@ -72,6 +73,9 @@ export default function ProfileScreen() {
   const [termsVisible, setTermsVisible] = useState(false);
   const [selectedRating, setSelectedRating] = useState(0);
   const [friendRequests, setFriendRequests] = useState([]);
+  const [friendsVisible, setFriendsVisible] = useState(false);
+  const [friends, setFriends] = useState([]);
+  const [loadingFriends, setLoadingFriends] = useState(false);
 
   useEffect(() => {
     refreshAppData?.();
@@ -246,6 +250,24 @@ export default function ProfileScreen() {
     }
   };
 
+  const handleOpenFriends = async () => {
+    try {
+      setFriendsVisible(true);
+      setLoadingFriends(true);
+
+      const result = await getFriendsApi();
+      setFriends(result.friends || []);
+    } catch (error) {
+      setFriends([]);
+      Alert.alert(
+        "Could not load friends",
+        error.response?.data?.message || error.message || "Please try again."
+      );
+    } finally {
+      setLoadingFriends(false);
+    }
+  };
+
   const handleComingSoon = (label) => {
     Alert.alert(label, "This setting will be connected later.");
   };
@@ -288,7 +310,11 @@ export default function ProfileScreen() {
         </TouchableOpacity>
 
         <View style={styles.quickRow}>
-          <TouchableOpacity style={styles.quickButton} activeOpacity={0.8}>
+          <TouchableOpacity
+            style={styles.quickButton}
+            onPress={handleOpenFriends}
+            activeOpacity={0.8}
+          >
             <Text style={styles.quickIcon}>👥</Text>
             <Text style={styles.quickText}>{friendCount || 0} friends</Text>
           </TouchableOpacity>
@@ -392,6 +418,62 @@ export default function ProfileScreen() {
       </Section>
 
       <Text style={styles.footer}>Mood data stays private by default.</Text>
+
+      <Modal
+        visible={friendsVisible}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setFriendsVisible(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.friendsModalCard}>
+            <View style={styles.friendsModalHeader}>
+              <Text style={styles.modalTitle}>Friends</Text>
+              <TouchableOpacity
+                style={styles.closeButton}
+                onPress={() => setFriendsVisible(false)}
+                activeOpacity={0.75}
+              >
+                <Text style={styles.closeButtonText}>×</Text>
+              </TouchableOpacity>
+            </View>
+
+            {loadingFriends ? (
+              <Text style={styles.friendsEmptyText}>Loading friends...</Text>
+            ) : friends.length === 0 ? (
+              <Text style={styles.friendsEmptyText}>
+                No accepted friends yet.
+              </Text>
+            ) : (
+              <ScrollView style={styles.friendsList}>
+                {friends.map((friend) => (
+                  <View key={friend.id} style={styles.friendRow}>
+                    <View style={styles.friendAvatar}>
+                      {friend.avatarUrl ? (
+                        <Image
+                          source={{ uri: friend.avatarUrl }}
+                          style={styles.friendAvatarImage}
+                        />
+                      ) : (
+                        <Text style={styles.friendAvatarInitial}>
+                          {friend.username?.[0]?.toUpperCase() || "?"}
+                        </Text>
+                      )}
+                    </View>
+
+                    <View style={styles.friendInfo}>
+                      <Text style={styles.friendName}>
+                        {friend.username || "MoodSnap user"}
+                      </Text>
+                      <Text style={styles.friendMeta}>Accepted friend</Text>
+                    </View>
+                  </View>
+                ))}
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
 
       <Modal
         visible={isEditingName}
@@ -822,5 +904,83 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     lineHeight: 22,
     marginBottom: 14,
+  },
+  friendsModalCard: {
+    backgroundColor: "#151515",
+    borderRadius: 28,
+    padding: 20,
+    maxHeight: "78%",
+  },
+  friendsModalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  closeButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#292929",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 14,
+  },
+  closeButtonText: {
+    color: "#fff",
+    fontSize: 26,
+    fontWeight: "900",
+    marginTop: -2,
+  },
+  friendsList: {
+    maxHeight: 430,
+  },
+  friendRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#252525",
+  },
+  friendAvatar: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: "#2b2b2b",
+    borderWidth: 2,
+    borderColor: COLORS.primary,
+    justifyContent: "center",
+    alignItems: "center",
+    overflow: "hidden",
+  },
+  friendAvatarImage: {
+    width: "100%",
+    height: "100%",
+  },
+  friendAvatarInitial: {
+    color: "#fff",
+    fontSize: 22,
+    fontWeight: "900",
+  },
+  friendInfo: {
+    flex: 1,
+  },
+  friendName: {
+    color: "#fff",
+    fontSize: 17,
+    fontWeight: "900",
+  },
+  friendMeta: {
+    color: "#aaa",
+    fontSize: 12,
+    fontWeight: "800",
+    marginTop: 3,
+  },
+  friendsEmptyText: {
+    color: "#aaa",
+    fontSize: 15,
+    fontWeight: "800",
+    lineHeight: 22,
+    paddingVertical: 18,
   },
 });
