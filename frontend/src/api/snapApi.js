@@ -43,7 +43,11 @@ export const getFeedApi = async ({ cursor, limit = 20 } = {}) => {
     throw new Error(data.message || "Failed to get feed");
   }
 
-  return data;
+  return {
+    ...data,
+    snaps: data.snaps || data.data?.snaps || [],
+    nextCursor: data.nextCursor || data.data?.nextCursor || null,
+  };
 };
 
 export const createSnapApi = async ({

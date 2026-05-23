@@ -24,6 +24,8 @@ export function AuthProvider({ children }) {
   const [friendLink, setFriendLink] = useState("");
   const [streak, setStreak] = useState(0);
   const [postedToday, setPostedToday] = useState(false);
+  const [lastSnapAt, setLastSnapAt] = useState(null);
+  const [todayKey, setTodayKey] = useState(null);
   const [feedRefreshKey, setFeedRefreshKey] = useState(0);
 
   const clearSession = async () => {
@@ -35,6 +37,8 @@ export function AuthProvider({ children }) {
     setFriendLink("");
     setStreak(0);
     setPostedToday(false);
+    setLastSnapAt(null);
+    setTodayKey(null);
   };
 
   const loadSession = async () => {
@@ -94,18 +98,59 @@ export function AuthProvider({ children }) {
     return result.user;
   };
 
-  const updateUser = async (data) => {
-    const result = await updateMeApi(data);
-
-    if (result.user) {
-      await saveUser(result.user);
-      setUser(result.user);
-      setFeedRefreshKey((current) => current + 1);
-      const linkResult = await getFriendLinkApi().catch(() => null);
-      setFriendLink(linkResult?.friendLink || "");
+  const buildOptimisticUser = (currentUser, data) => {
+    if (!currentUser) {
+      return currentUser;
     }
 
-    return result.user;
+    const nextUsername =
+      typeof data.username === "string" && data.username.trim()
+        ? data.username.trim().replace(/^@+/, "")
+        : currentUser.username;
+    const nextDisplayName =
+      typeof data.displayName === "string"
+        ? data.displayName.trim() || null
+        : currentUser.displayName || null;
+    const nextProfileColor =
+      typeof data.profileColor === "string" && data.profileColor.trim()
+        ? data.profileColor.trim()
+        : currentUser.profileColor;
+
+    return {
+      ...currentUser,
+      username: nextUsername,
+      displayName: nextDisplayName,
+      displayLabel: nextDisplayName || nextUsername,
+      profileColor: nextProfileColor,
+    };
+  };
+
+  const updateUser = async (data, options = {}) => {
+    const previousUser = user;
+
+    if (options.optimistic) {
+      setUser((currentUser) => buildOptimisticUser(currentUser, data));
+    }
+
+    try {
+      const result = await updateMeApi(data);
+
+      if (result.user) {
+        await saveUser(result.user);
+        setUser(result.user);
+        setFeedRefreshKey((current) => current + 1);
+        const linkResult = await getFriendLinkApi().catch(() => null);
+        setFriendLink(linkResult?.friendLink || "");
+      }
+
+      return result.user;
+    } catch (error) {
+      if (options.optimistic && previousUser) {
+        setUser(previousUser);
+      }
+
+      throw error;
+    }
   };
 
   const updateProfilePhoto = async (imageUri) => {
@@ -135,7 +180,9 @@ export function AuthProvider({ children }) {
   const refreshStreak = async () => {
     const result = await getMoodStreakApi();
     setStreak(result.streak || 0);
-    setPostedToday(Boolean(result.postedToday));
+    setPostedToday(Boolean(result.hasPostedToday ?? result.postedToday));
+    setLastSnapAt(result.lastSnapAt || null);
+    setTodayKey(result.todayKey || null);
     return result.streak || 0;
   };
 
@@ -179,6 +226,8 @@ export function AuthProvider({ children }) {
         friendLink,
         streak,
         postedToday,
+        lastSnapAt,
+        todayKey,
         feedRefreshKey,
         login,
         logout,

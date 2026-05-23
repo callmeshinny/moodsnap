@@ -21,6 +21,7 @@ import {
   sendFriendRequestApi,
   unfriendApi,
 } from "../../api/friendApi";
+import { rateMoodSnapApi } from "../../api/ratingApi";
 import { deleteMeApi } from "../../api/userApi";
 import {
   ColorPickerModal,
@@ -56,17 +57,25 @@ export default function ProfileScreen() {
     logout,
     friendCount,
     refreshAppData,
+    refreshFriendLink,
     updateUser,
     updateProfilePhoto,
   } = useContext(AuthContext);
   const [isEditingName, setIsEditingName] = useState(false);
-  const [draftName, setDraftName] = useState(
-    user?.displayName || user?.username || ""
+  const [draftDisplayName, setDraftDisplayName] = useState(
+    user?.displayName || ""
   );
+  const [draftUsername, setDraftUsername] = useState(user?.username || "");
   const [savingName, setSavingName] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [colorModalVisible, setColorModalVisible] = useState(false);
+  const [accentColor, setAccentColor] = useState(
+    user?.profileColor || COLORS.primary
+  );
+  const [inviteUsername, setInviteUsername] = useState(user?.username || "");
   const [ratingModalVisible, setRatingModalVisible] = useState(false);
+  const [submittingRating, setSubmittingRating] = useState(false);
+  const [hasRatedMoodSnap, setHasRatedMoodSnap] = useState(false);
   const [termsVisible, setTermsVisible] = useState(false);
   const [privacyVisible, setPrivacyVisible] = useState(false);
   const [friendRequests, setFriendRequests] = useState([]);
@@ -84,15 +93,23 @@ export default function ProfileScreen() {
   }, []);
 
   useEffect(() => {
-    setDraftName(user?.displayName || user?.username || "");
+    setDraftDisplayName(user?.displayName || "");
+    setDraftUsername(user?.username || "");
+    setInviteUsername(user?.username || "");
   }, [user?.displayName, user?.username]);
 
-  const displayFriendLink = buildDisplayFriendLink(user?.username) || "Loading share URL...";
-  const shareFriendLink = buildShareFriendLink(user?.username);
-  const profileColor = user?.profileColor || COLORS.primary;
+  useEffect(() => {
+    setAccentColor(user?.profileColor || COLORS.primary);
+  }, [user?.profileColor]);
+
+  const activeUsername = inviteUsername || user?.username;
+  const displayFriendLink =
+    buildDisplayFriendLink(activeUsername) || "Loading share URL...";
+  const shareFriendLink = buildShareFriendLink(activeUsername);
+  const profileColor = accentColor || user?.profileColor || COLORS.primary;
 
   const getInviteMessage = () =>
-    `Add me on MoodSnap ${shareFriendLink || displayFriendLink} then share our mood`;
+    `Add me on MoodSnap ${displayFriendLink} then share our mood`;
 
   const handleSignOut = async () => {
     Alert.alert("Sign out", "Are you sure you want to sign out?", [
@@ -216,15 +233,39 @@ export default function ProfileScreen() {
     );
   };
 
+  const handleOpenEditProfile = () => {
+    setDraftDisplayName(user?.displayName || "");
+    setDraftUsername(user?.username || "");
+    setIsEditingName(true);
+  };
+
   const handleSaveName = async () => {
+    const username = draftUsername.trim().replace(/^@+/, "");
+
+    if (!username) {
+      Alert.alert("Username required", "Please enter a username.");
+      return;
+    }
+
     try {
       setSavingName(true);
-      await updateUser?.({ displayName: draftName });
+      const updatedUser = await updateUser?.({
+        displayName: draftDisplayName,
+        username,
+      });
+
+      if (updatedUser?.username) {
+        setInviteUsername(updatedUser.username);
+      }
+
+      await refreshFriendLink?.();
       setIsEditingName(false);
     } catch (error) {
       Alert.alert(
         "Update failed",
-        error.response?.data?.message || error.message || "Could not update name."
+        error.response?.data?.message ||
+          error.message ||
+          "Could not update profile."
       );
     } finally {
       setSavingName(false);
@@ -393,32 +434,66 @@ export default function ProfileScreen() {
   };
 
   const handleRateMoodSnap = async (rating) => {
-    setRatingModalVisible(false);
-
-    if (APP_STORE_URL) {
+    if (hasRatedMoodSnap) {
+      setRatingModalVisible(false);
       Alert.alert(
-        "Thanks for rating",
-        `You rated MoodSnap ${rating}/5. Would you like to leave a review?`,
-        [
-          { text: "Not now", style: "cancel" },
-          {
-            text: "Open store",
-            onPress: () => Linking.openURL(APP_STORE_URL),
-          },
-        ]
+        "Already rated",
+        "You have already rated MoodSnap. Thank you!"
       );
       return;
     }
 
-    Alert.alert("Thanks for rating", `You rated MoodSnap ${rating}/5 stars.`);
+    try {
+      setSubmittingRating(true);
+      await rateMoodSnapApi({ rating });
+      setHasRatedMoodSnap(true);
+      setRatingModalVisible(false);
+
+      if (APP_STORE_URL) {
+        Alert.alert(
+          "Thanks for rating",
+          `You rated MoodSnap ${rating}/5. Would you like to leave a review?`,
+          [
+            { text: "Not now", style: "cancel" },
+            {
+              text: "Open store",
+              onPress: () => Linking.openURL(APP_STORE_URL),
+            },
+          ]
+        );
+        return;
+      }
+
+      Alert.alert("Thanks for rating", `You rated MoodSnap ${rating}/5 stars.`);
+    } catch (error) {
+      const message =
+        error.response?.data?.message ||
+        error.message ||
+        "Could not save your rating.";
+
+      if (message.toLowerCase().includes("already rated")) {
+        setHasRatedMoodSnap(true);
+        setRatingModalVisible(false);
+        Alert.alert(
+          "Already rated",
+          "You have already rated MoodSnap. Thank you!"
+        );
+        return;
+      }
+
+      Alert.alert("Rating failed", message);
+    } finally {
+      setSubmittingRating(false);
+    }
   };
 
   const handleChooseProfileColor = async (color) => {
     try {
       setColorModalVisible(false);
-      await updateUser?.({ profileColor: color });
-      await refreshAppData?.();
+      setAccentColor(color);
+      await updateUser?.({ profileColor: color }, { optimistic: true });
     } catch (error) {
+      setAccentColor(user?.profileColor || COLORS.primary);
       Alert.alert(
         "Update failed",
         error.response?.data?.message || error.message || "Could not update colour."
@@ -439,16 +514,11 @@ export default function ProfileScreen() {
         onOpenFriendLink={handleOpenFriendLink}
         onOpenFriends={handleOpenFriends}
         onShareFriendLink={handleShareFriendLink}
-        onOpenColorPicker={() => setColorModalVisible(true)}
+        onPressAvatar={handleEditProfilePhoto}
       />
 
       <Section title="General">
-        <SettingRow icon="Aa" label="Edit name" onPress={() => setIsEditingName(true)} />
-        <SettingRow
-          icon="👤"
-          label="Edit profile photo"
-          onPress={handleEditProfilePhoto}
-        />
+        <SettingRow icon="Aa" label="Edit profile" onPress={handleOpenEditProfile} />
         <SettingRow
           icon="🎨"
           label="Profile ring colour"
@@ -545,16 +615,20 @@ export default function ProfileScreen() {
       <EditNameModal
         visible={isEditingName}
         onClose={() => setIsEditingName(false)}
-        draftName={draftName}
-        onChangeDraftName={setDraftName}
+        draftDisplayName={draftDisplayName}
+        draftUsername={draftUsername}
+        onChangeDraftDisplayName={setDraftDisplayName}
+        onChangeDraftUsername={setDraftUsername}
         onSave={handleSaveName}
         savingName={savingName}
+        accentColor={profileColor}
       />
 
       <RatingModal
         visible={ratingModalVisible}
         onClose={() => setRatingModalVisible(false)}
         onRate={handleRateMoodSnap}
+        submittingRating={submittingRating}
       />
 
       <TermsModal visible={termsVisible} onClose={() => setTermsVisible(false)} />

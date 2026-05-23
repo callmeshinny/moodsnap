@@ -17,6 +17,55 @@ const toLocalDateKey = (dateValue: string | Date) => {
   return `${year}-${month}-${day}`;
 };
 
+const DEFAULT_TIMEZONE = "Asia/Ho_Chi_Minh";
+
+const getSafeTimezone = (timezone?: string | null) => {
+  if (!timezone) {
+    return DEFAULT_TIMEZONE;
+  }
+
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: timezone }).format(new Date());
+    return timezone;
+  } catch {
+    return DEFAULT_TIMEZONE;
+  }
+};
+
+const toZonedDateKey = (dateValue: string | Date, timezone: string) => {
+  const date = dateValue instanceof Date ? dateValue : new Date(dateValue);
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  const parts = formatter.formatToParts(date);
+  const year = parts.find((part) => part.type === "year")?.value;
+  const month = parts.find((part) => part.type === "month")?.value;
+  const day = parts.find((part) => part.type === "day")?.value;
+
+  return `${year}-${month}-${day}`;
+};
+
+const addDays = (date: Date, days: number) => {
+  return new Date(date.getTime() + days * 24 * 60 * 60 * 1000);
+};
+
+const getUserTimezone = async (userId: string) => {
+  const { data: user, error } = await supabase
+    .from("users")
+    .select("timezone")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return getSafeTimezone(user?.timezone);
+};
+
 export const getMoodCalendar = async (userId: string) => {
   const { data: snaps, error } = await supabase
     .from("moodsnap")
@@ -78,6 +127,7 @@ export const getMoodCalendar = async (userId: string) => {
 };
 
 export const getMoodStreak = async (userId: string) => {
+  const timezone = await getUserTimezone(userId);
   const { data: snaps, error } = await supabase
     .from("moodsnap")
     .select("created_at")
@@ -89,20 +139,26 @@ export const getMoodStreak = async (userId: string) => {
   }
 
   const activityDates = new Set(
-    (snaps || []).map((snap) => toLocalDateKey(snap.created_at))
+    (snaps || []).map((snap) => toZonedDateKey(snap.created_at, timezone))
   );
 
-  const todayKey = toLocalDateKey(new Date());
-  let cursor = new Date();
+  const now = new Date();
+  const todayKey = toZonedDateKey(now, timezone);
+  const hasPostedToday = activityDates.has(todayKey);
+  const lastSnapAt = snaps?.[0]?.created_at || null;
+  let cursor = hasPostedToday ? now : addDays(now, -1);
   let streak = 0;
 
-  while (activityDates.has(toLocalDateKey(cursor))) {
+  while (activityDates.has(toZonedDateKey(cursor, timezone))) {
     streak += 1;
-    cursor.setDate(cursor.getDate() - 1);
+    cursor = addDays(cursor, -1);
   }
 
   return {
     streak,
-    postedToday: activityDates.has(todayKey),
+    hasPostedToday,
+    postedToday: hasPostedToday,
+    lastSnapAt,
+    todayKey,
   };
 };

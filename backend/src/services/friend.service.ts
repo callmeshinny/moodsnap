@@ -537,15 +537,12 @@ const getBlockedCounterpartIds = async (userId: string): Promise<string[]> => {
 };
 
 export const getVisibleSnapUserIds = async (userId: string): Promise<string[]> => {
-  try {
-    const friendIds = await getAcceptedFriendIds(userId);
-    const blockedIds = new Set(await getBlockedCounterpartIds(userId));
-    return Array.from(
-      new Set([userId, ...friendIds.filter((friendId) => !blockedIds.has(friendId))])
-    );
-  } catch {
-    return [userId];
-  }
+  const friendIds = await getAcceptedFriendIds(userId);
+  const blockedIds = new Set(await getBlockedCounterpartIds(userId));
+
+  return Array.from(
+    new Set([userId, ...friendIds.filter((friendId) => !blockedIds.has(friendId))])
+  );
 };
 
 export const getPendingFriendRequests = async (userId: string) => {

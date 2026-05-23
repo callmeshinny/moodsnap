@@ -1,5 +1,5 @@
 import React from "react";
-import { Text, TouchableOpacity, View } from "react-native";
+import { Image, Text, TouchableOpacity, View } from "react-native";
 import { Section } from "./ProfileSections";
 import { profileStyles as styles } from "./profileStyles";
 
@@ -31,15 +31,47 @@ export default function FriendRequestsSection({
       )}
       {friendRequests.map((request) => (
         <View key={request.id} style={styles.requestRow}>
-          <View>
-            <Text style={styles.requestName}>
-              {request.sender?.displayLabel ||
-                request.sender?.username ||
-                "MoodSnap user"}
-            </Text>
-            <Text style={styles.requestMeta}>
-              @{request.sender?.username || "unknown"} wants to add you
-            </Text>
+          <View style={styles.requestLeft}>
+            <View
+              style={[
+                styles.requestAvatar,
+                request.sender?.profileColor && {
+                  borderColor: request.sender.profileColor,
+                },
+              ]}
+            >
+              {request.sender?.avatarUrl ? (
+                <Image
+                  source={{ uri: request.sender.avatarUrl }}
+                  style={styles.requestAvatarImage}
+                />
+              ) : (
+                <Text style={styles.requestAvatarInitial}>
+                  {(
+                    request.sender?.displayLabel ||
+                    request.sender?.username ||
+                    "?"
+                  )[0]?.toUpperCase()}
+                </Text>
+              )}
+            </View>
+            <View style={styles.requestInfo}>
+              <Text style={styles.requestName}>
+                {request.sender?.displayLabel ||
+                  request.sender?.username ||
+                  "MoodSnap user"}
+              </Text>
+              <Text
+                style={[
+                  styles.requestMeta,
+                  request.sender?.profileColor && {
+                    color: request.sender.profileColor,
+                  },
+                ]}
+              >
+                @{request.sender?.username || "unknown"} wants to add you
+              </Text>
+            </View>
           </View>
           <View style={styles.requestActions}>
             <TouchableOpacity

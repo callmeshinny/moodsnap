@@ -78,9 +78,10 @@ export const updateUserProfile = async (
   userId: string,
   input: { username?: unknown; displayName?: unknown; profileColor?: unknown }
 ) => {
-  const updates: Record<string, string> = {
+  const updates: Record<string, string | null> = {
     updated_at: new Date().toISOString(),
   };
+  let hasProfileUpdate = false;
 
   if (typeof input.username === "string") {
     const username = input.username.trim();
@@ -113,17 +114,26 @@ export const updateUserProfile = async (
 
     updates.username = username;
     updates.username_normalized = usernameNormalized;
+    hasProfileUpdate = true;
   }
 
   if (typeof input.displayName === "string") {
-    updates.display_name = input.displayName.trim();
+    updates.display_name = input.displayName.trim() || null;
+    hasProfileUpdate = true;
   }
 
   if (typeof input.profileColor === "string") {
-    updates.profile_color = input.profileColor;
+    const profileColor = input.profileColor.trim();
+
+    if (!/^#[0-9a-fA-F]{6}$/.test(profileColor)) {
+      throw new Error("Profile color must be a valid hex color.");
+    }
+
+    updates.profile_color = profileColor;
+    hasProfileUpdate = true;
   }
 
-  if (!updates.username && !updates.display_name && !updates.profile_color) {
+  if (!hasProfileUpdate) {
     throw new Error("Nothing to update");
   }
 

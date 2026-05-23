@@ -1,10 +1,11 @@
-import React, { useCallback, useContext, useEffect, useState } from "react";
+import React, { useCallback, useContext, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  Dimensions,
+  Animated,
   FlatList,
   Modal,
+  PanResponder,
   RefreshControl,
   StyleSheet,
   Text,
@@ -21,18 +22,129 @@ import { COLORS } from "../../constants/colors";
 import { getMoodMeta } from "../../utils/moods";
 import { formatUploadTime } from "../../utils/time";
 
-const { height } = Dimensions.get("window");
+function ZoomableImage({ sourceUri, softFilterEnabled }) {
+  const pan = useRef(new Animated.ValueXY()).current;
+  const scale = useRef(new Animated.Value(1)).current;
+  const lastPan = useRef({ x: 0, y: 0 });
+  const lastScale = useRef(1);
+  const gestureStart = useRef({
+    distance: 0,
+    scale: 1,
+    pan: { x: 0, y: 0 },
+    point: { x: 0, y: 0 },
+  });
+
+  const getTouchDistance = (touches) => {
+    const [first, second] = touches;
+    const x = first.pageX - second.pageX;
+    const y = first.pageY - second.pageY;
+    return Math.sqrt(x * x + y * y);
+  };
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gestureState) =>
+        Math.abs(gestureState.dx) > 2 || Math.abs(gestureState.dy) > 2,
+      onPanResponderGrant: (event) => {
+        const touches = event.nativeEvent.touches;
+
+        gestureStart.current = {
+          distance: touches.length >= 2 ? getTouchDistance(touches) : 0,
+          scale: lastScale.current,
+          pan: { ...lastPan.current },
+          point: {
+            x: touches[0]?.pageX || 0,
+            y: touches[0]?.pageY || 0,
+          },
+        };
+      },
+      onPanResponderMove: (event, gestureState) => {
+        const touches = event.nativeEvent.touches;
+
+        if (touches.length >= 2 && gestureStart.current.distance > 0) {
+          const nextScale = Math.min(
+            Math.max(
+              gestureStart.current.scale *
+                (getTouchDistance(touches) / gestureStart.current.distance),
+              1
+            ),
+            4
+          );
+          lastScale.current = nextScale;
+          scale.setValue(nextScale);
+          return;
+        }
+
+        if (lastScale.current <= 1) {
+          return;
+        }
+
+        const nextX = gestureStart.current.pan.x + gestureState.dx;
+        const nextY = gestureStart.current.pan.y + gestureState.dy;
+        lastPan.current = { x: nextX, y: nextY };
+        pan.setValue(lastPan.current);
+      },
+      onPanResponderRelease: () => {
+        if (lastScale.current <= 1.02) {
+          lastScale.current = 1;
+          lastPan.current = { x: 0, y: 0 };
+          Animated.parallel([
+            Animated.spring(scale, {
+              toValue: 1,
+              useNativeDriver: true,
+            }),
+            Animated.spring(pan, {
+              toValue: { x: 0, y: 0 },
+              useNativeDriver: true,
+            }),
+          ]).start();
+        }
+      },
+      onPanResponderTerminate: () => {
+        lastPan.current = { x: 0, y: 0 };
+      },
+    })
+  ).current;
+
+  return (
+    <View style={styles.zoomViewport} {...panResponder.panHandlers}>
+      <Animated.View
+        style={[
+          styles.zoomImageWrap,
+          {
+            transform: [
+              { translateX: pan.x },
+              { translateY: pan.y },
+              { scale },
+            ],
+          },
+        ]}
+      >
+        <Image
+          source={{ uri: sourceUri }}
+          style={styles.zoomImage}
+          contentFit="contain"
+        />
+        {softFilterEnabled ? (
+          <View pointerEvents="none" style={styles.modalSoftFilterOverlay} />
+        ) : null}
+      </Animated.View>
+    </View>
+  );
+}
 
 const Avatar = React.memo(function Avatar({ user }) {
   const ringColor = user?.profileColor || COLORS.primary;
-  const initial = user?.username?.[0]?.toUpperCase() || "?";
+  const displayName = user?.displayLabel || user?.username || "MoodSnap user";
+  const initial = displayName?.[0]?.toUpperCase() || "?";
 
   return (
     <View style={[styles.avatarRing, { borderColor: ringColor }]}>
       {user?.avatarUrl ? (
         <Image source={{ uri: user.avatarUrl }} style={styles.avatar} contentFit="cover" />
       ) : (
-        <View style={styles.avatarFallback}>
+        <View style={[styles.avatarFallback, { backgroundColor: ringColor }]}>
           <Text style={styles.avatarInitial}>{initial}</Text>
         </View>
       )}
@@ -43,12 +155,16 @@ const Avatar = React.memo(function Avatar({ user }) {
 const FeedCard = React.memo(function FeedCard({
   item,
   onOpen,
-  currentUserId,
+  currentUser,
   onDelete,
 }) {
+  const snapUser =
+    item.user || (item.userId === currentUser?.id ? currentUser : null);
   const mood = getMoodMeta(item.mood);
-  const name = item.user?.displayLabel || item.user?.username || "MoodSnap user";
-  const canDelete = currentUserId && item.userId === currentUserId;
+  const name = snapUser?.displayLabel || snapUser?.username || "MoodSnap user";
+  const username = snapUser?.username ? `@${snapUser.username}` : "@unknown";
+  const accentColor = snapUser?.profileColor || COLORS.primary;
+  const canDelete = currentUser?.id && item.userId === currentUser.id;
 
   return (
     <TouchableOpacity
@@ -85,9 +201,12 @@ const FeedCard = React.memo(function FeedCard({
 
       <View style={styles.cardFooter}>
         <View style={styles.userRow}>
-          <Avatar user={item.user} />
+          <Avatar user={snapUser} />
           <View>
             <Text style={styles.name}>{name}</Text>
+            <Text style={[styles.username, { color: accentColor }]}>
+              {username}
+            </Text>
             <Text style={styles.moodText}>
               {mood.emoji} {item.mood}
             </Text>
@@ -222,11 +341,11 @@ export default function FeedScreen() {
       <FeedCard
         item={item}
         onOpen={setSelectedSnap}
-        currentUserId={user?.id}
+        currentUser={user}
         onDelete={handleDeleteSnap}
       />
     ),
-    [user?.id]
+    [user]
   );
 
   useEffect(() => {
@@ -307,35 +426,52 @@ export default function FeedScreen() {
 
             {selectedSnap && (
               <>
-                <Image
-                  source={{ uri: selectedSnap.imageUrl }}
-                  style={styles.modalImage}
-                  contentFit="contain"
+                <ZoomableImage
+                  sourceUri={selectedSnap.imageUrl}
+                  softFilterEnabled={selectedSnap.softFilterEnabled}
                 />
-                {selectedSnap.softFilterEnabled ? (
-                  <View pointerEvents="none" style={styles.modalSoftFilterOverlay} />
-                ) : null}
-                <Text style={styles.modalTitle}>
-                  {selectedSnap.user?.displayLabel ||
-                    selectedSnap.user?.username ||
-                    "MoodSnap user"}
-                </Text>
-                {selectedSnap.userId === user?.id ? (
-                  <TouchableOpacity
-                    style={styles.modalDeleteButton}
-                    onPress={() => handleDeleteSnap(selectedSnap)}
-                    activeOpacity={0.8}
+                <View style={styles.modalInfoOverlay}>
+                  <Text style={styles.modalTitle}>
+                    {selectedSnap.user?.displayLabel ||
+                      (selectedSnap.userId === user?.id && user?.displayLabel) ||
+                      selectedSnap.user?.username ||
+                      (selectedSnap.userId === user?.id && user?.username) ||
+                      "MoodSnap user"}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.modalUsername,
+                      {
+                        color:
+                          selectedSnap.user?.profileColor ||
+                          (selectedSnap.userId === user?.id &&
+                            user?.profileColor) ||
+                          COLORS.primary,
+                      },
+                    ]}
                   >
-                    <Text style={styles.modalDeleteText}>Delete snap</Text>
-                  </TouchableOpacity>
-                ) : null}
-                <Text style={styles.modalMeta}>
-                  {formatUploadTime(selectedSnap.createdAt)} ·{" "}
-                  {getMoodMeta(selectedSnap.mood).emoji} {selectedSnap.mood}
-                </Text>
-                {!!selectedSnap.caption && (
-                  <Text style={styles.modalCaption}>{selectedSnap.caption}</Text>
-                )}
+                    @
+                    {selectedSnap.user?.username ||
+                      (selectedSnap.userId === user?.id && user?.username) ||
+                      "unknown"}
+                  </Text>
+                  <Text style={styles.modalMeta}>
+                    {formatUploadTime(selectedSnap.createdAt)} ·{" "}
+                    {getMoodMeta(selectedSnap.mood).emoji} {selectedSnap.mood}
+                  </Text>
+                  {!!selectedSnap.caption && (
+                    <Text style={styles.modalCaption}>{selectedSnap.caption}</Text>
+                  )}
+                  {selectedSnap.userId === user?.id ? (
+                    <TouchableOpacity
+                      style={styles.modalDeleteButton}
+                      onPress={() => handleDeleteSnap(selectedSnap)}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.modalDeleteText}>Delete snap</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
               </>
             )}
           </View>
@@ -491,6 +627,11 @@ const styles = StyleSheet.create({
     fontSize: 21,
     fontWeight: "900",
   },
+  username: {
+    fontSize: 12,
+    fontWeight: "900",
+    marginTop: 1,
+  },
   moodText: {
     color: "#f4f4f4",
     fontSize: 13,
@@ -546,17 +687,16 @@ const styles = StyleSheet.create({
   },
   modalBackdrop: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.9)",
+    backgroundColor: "rgba(0,0,0,0.96)",
     justifyContent: "center",
-    padding: 18,
+    padding: 0,
   },
   closeArea: {
     ...StyleSheet.absoluteFillObject,
   },
   modalCard: {
-    borderRadius: 30,
-    backgroundColor: "#111",
-    padding: 14,
+    flex: 1,
+    backgroundColor: "#000",
   },
   modalCloseButton: {
     position: "absolute",
@@ -573,19 +713,21 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "900",
   },
-  modalImage: {
+  zoomViewport: {
     width: "100%",
-    height: height * 0.62,
-    borderRadius: 24,
+    flex: 1,
     backgroundColor: "#050505",
+    overflow: "hidden",
+  },
+  zoomImageWrap: {
+    flex: 1,
+  },
+  zoomImage: {
+    width: "100%",
+    height: "100%",
   },
   modalSoftFilterOverlay: {
-    position: "absolute",
-    left: 14,
-    right: 14,
-    top: 14,
-    height: height * 0.62,
-    borderRadius: 24,
+    ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(255,205,221,0.13)",
     zIndex: 1,
   },
@@ -593,7 +735,11 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 22,
     fontWeight: "900",
-    marginTop: 16,
+  },
+  modalUsername: {
+    fontSize: 14,
+    fontWeight: "900",
+    marginTop: 3,
   },
   modalCaption: {
     color: "#fff",
@@ -602,12 +748,21 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     marginTop: 10,
   },
+  modalInfoOverlay: {
+    position: "absolute",
+    left: 18,
+    right: 18,
+    bottom: 28,
+    borderRadius: 24,
+    backgroundColor: "rgba(0,0,0,0.58)",
+    padding: 16,
+  },
   modalDeleteButton: {
     borderRadius: 16,
     backgroundColor: "#2a1118",
     paddingVertical: 12,
     alignItems: "center",
-    marginTop: 14,
+    marginTop: 12,
   },
   modalDeleteText: {
     color: COLORS.danger,

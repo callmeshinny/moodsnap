@@ -138,6 +138,16 @@ alter table public.moodsnap add column if not exists cloudinary_public_id text;
 alter table public.moodsnap add column if not exists soft_filter_enabled boolean not null default false;
 alter table public.moodsnap add column if not exists updated_at timestamptz not null default now();
 
+create table if not exists public.app_ratings (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.users(id) on delete cascade,
+  rating integer not null check (rating between 1 and 5),
+  feedback text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint app_ratings_user_unique unique (user_id)
+);
+
 create unique index if not exists users_username_normalized_unique_idx
   on public.users (username_normalized);
 create unique index if not exists users_username_lower_unique_idx
@@ -154,3 +164,5 @@ create index if not exists blocked_users_blocked_idx on public.blocked_users (bl
 create index if not exists user_reports_reported_idx on public.user_reports (reported_user_id);
 create index if not exists moodsnap_user_id_idx on public.moodsnap (user_id);
 create index if not exists moodsnap_created_at_idx on public.moodsnap (created_at desc);
+create index if not exists app_ratings_user_id_idx on public.app_ratings (user_id);
+create index if not exists app_ratings_rating_idx on public.app_ratings (rating);

@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { getMoodCalendar, getMoodStreak } from "../services/mood.service";
+import { createAppRating, getMyRating } from "../services/rating.service";
 
 const requireUserId = (req: Request, res: Response): string | null => {
   if (!req.user?.id) {
@@ -13,7 +13,7 @@ const requireUserId = (req: Request, res: Response): string | null => {
   return req.user.id;
 };
 
-export const getCalendar = async (
+export const createRating = async (
   req: Request,
   res: Response
 ): Promise<void> => {
@@ -21,21 +21,26 @@ export const getCalendar = async (
     const userId = requireUserId(req, res);
     if (!userId) return;
 
-    const calendar = await getMoodCalendar(userId);
+    const rating = await createAppRating(userId, req.body);
 
-    res.status(200).json({
+    res.status(201).json({
       success: true,
-      ...calendar,
+      message: "Thanks for rating MoodSnap.",
+      data: { rating },
     });
   } catch (error) {
     const message =
-      error instanceof Error ? error.message : "Failed to get mood calendar";
+      error instanceof Error ? error.message : "Failed to save rating";
+    const status = message.includes("already rated") ? 409 : 400;
 
-    res.status(400).json({ success: false, message });
+    res.status(status).json({
+      success: false,
+      message,
+    });
   }
 };
 
-export const getStreak = async (
+export const getMyAppRating = async (
   req: Request,
   res: Response
 ): Promise<void> => {
@@ -43,16 +48,19 @@ export const getStreak = async (
     const userId = requireUserId(req, res);
     if (!userId) return;
 
-    const streakData = await getMoodStreak(userId);
+    const rating = await getMyRating(userId);
 
     res.status(200).json({
       success: true,
-      ...streakData,
+      data: { rating },
     });
   } catch (error) {
     const message =
-      error instanceof Error ? error.message : "Failed to get mood streak";
+      error instanceof Error ? error.message : "Failed to get rating";
 
-    res.status(400).json({ success: false, message });
+    res.status(400).json({
+      success: false,
+      message,
+    });
   }
 };

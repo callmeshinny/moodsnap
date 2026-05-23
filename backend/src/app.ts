@@ -3,6 +3,7 @@ import cors from "cors";
 import authRoutes from "./routes/auth.routes";
 import friendRoutes from "./routes/friend.routes";
 import moodRoutes from "./routes/mood.routes";
+import ratingRoutes from "./routes/rating.routes";
 import snapRoutes from "./routes/snap.routes";
 import userRoutes from "./routes/user.routes";
 
@@ -100,5 +101,6 @@ app.use("/api/users", userRoutes);
 app.use("/api/snaps", snapRoutes);
 app.use("/api/friends", friendRoutes);
 app.use("/api/moods", moodRoutes);
+app.use("/api/ratings", ratingRoutes);
 
 export default app;

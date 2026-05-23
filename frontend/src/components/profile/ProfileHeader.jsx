@@ -11,18 +11,19 @@ export default function ProfileHeader({
   onOpenFriendLink,
   onOpenFriends,
   onShareFriendLink,
-  onOpenColorPicker,
+  onPressAvatar,
 }) {
   const displayName = user?.displayLabel || user?.username || "MoodSnap user";
+  const username = user?.username ? `@${user.username}` : "@moodsnap";
 
   return (
     <View style={styles.profileHeader}>
       <TouchableOpacity
         style={[styles.avatarOuter, { borderColor: profileColor }]}
-        onPress={onOpenColorPicker}
+        onPress={onPressAvatar}
         activeOpacity={0.82}
         accessibilityRole="button"
-        accessibilityLabel="Change profile ring colour"
+        accessibilityLabel="Update profile photo"
       >
         <View style={styles.avatarInner}>
           {user?.avatarUrl ? (
@@ -31,6 +32,11 @@ export default function ProfileHeader({
             <Text style={styles.avatarInitial}>
               {displayName[0]?.toUpperCase() || "M"}
             </Text>
+          )}
+          {!uploadingPhoto && (
+            <View style={styles.avatarEditBadge}>
+              <Text style={styles.avatarEditBadgeText}>📷</Text>
+            </View>
           )}
           {uploadingPhoto && (
             <View style={styles.avatarOverlay}>
@@ -41,6 +47,7 @@ export default function ProfileHeader({
       </TouchableOpacity>
 
       <Text style={styles.name}>{displayName}</Text>
+      <Text style={styles.usernameText}>{username}</Text>
       <TouchableOpacity
         onPress={onOpenFriendLink}
         activeOpacity={0.75}

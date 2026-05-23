@@ -58,19 +58,27 @@ export function ColorPickerModal({
   );
 }
 
-export function RatingModal({ visible, onClose, onRate }) {
+export function RatingModal({ visible, onClose, onRate, submittingRating }) {
   return (
     <Modal visible={visible} animationType="fade" transparent onRequestClose={onClose}>
       <View style={styles.modalBackdrop}>
         <View style={styles.modalCard}>
           <Text style={styles.modalTitle}>Rate MoodSnap</Text>
-          <Text style={styles.modalBody}>How does MoodSnap feel today?</Text>
+          <Text style={styles.modalBody}>
+            {submittingRating
+              ? "Saving your rating..."
+              : "How does MoodSnap feel today?"}
+          </Text>
           <View style={styles.starRow}>
             {[1, 2, 3, 4, 5].map((rating) => (
               <TouchableOpacity
                 key={rating}
-                style={styles.starButton}
+                style={[
+                  styles.starButton,
+                  submittingRating && styles.disabledButton,
+                ]}
                 onPress={() => onRate(rating)}
+                disabled={submittingRating}
                 activeOpacity={0.72}
                 accessibilityRole="button"
                 accessibilityLabel={`Rate ${rating} stars`}
@@ -81,13 +89,18 @@ export function RatingModal({ visible, onClose, onRate }) {
           </View>
           {APP_STORE_URL ? (
             <TouchableOpacity
-              style={styles.saveButton}
+              style={[styles.saveButton, submittingRating && styles.disabledButton]}
               onPress={() => Linking.openURL(APP_STORE_URL)}
+              disabled={submittingRating}
             >
               <Text style={styles.saveText}>Open in App Store</Text>
             </TouchableOpacity>
           ) : null}
-          <TouchableOpacity style={styles.fullCancelButton} onPress={onClose}>
+          <TouchableOpacity
+            style={[styles.fullCancelButton, submittingRating && styles.disabledButton]}
+            onPress={onClose}
+            disabled={submittingRating}
+          >
             <Text style={styles.cancelText}>Cancel</Text>
           </TouchableOpacity>
         </View>
@@ -181,29 +194,54 @@ export function PrivacyModal({ visible, onClose }) {
 export function EditNameModal({
   visible,
   onClose,
-  draftName,
-  onChangeDraftName,
+  draftDisplayName,
+  draftUsername,
+  onChangeDraftDisplayName,
+  onChangeDraftUsername,
   onSave,
   savingName,
+  accentColor,
 }) {
   return (
     <Modal visible={visible} animationType="fade" transparent onRequestClose={onClose}>
       <View style={styles.modalBackdrop}>
         <View style={styles.modalCard}>
-          <Text style={styles.modalTitle}>Edit name</Text>
+          <Text style={styles.modalTitle}>Edit profile</Text>
+          <Text style={styles.inputLabel}>Display name</Text>
           <TextInput
             style={styles.nameInput}
-            value={draftName}
-            onChangeText={onChangeDraftName}
+            value={draftDisplayName}
+            onChangeText={onChangeDraftDisplayName}
             placeholder="Display name"
             placeholderTextColor="#777"
             accessibilityLabel="Display name"
           />
+          <Text style={styles.inputLabel}>Username</Text>
+          <View style={styles.usernameInputWrap}>
+            <Text style={styles.usernamePrefix}>@</Text>
+            <TextInput
+              style={styles.usernameInput}
+              value={draftUsername}
+              onChangeText={onChangeDraftUsername}
+              placeholder="username"
+              placeholderTextColor="#777"
+              autoCapitalize="none"
+              autoCorrect={false}
+              accessibilityLabel="Username"
+            />
+          </View>
           <View style={styles.modalActions}>
             <TouchableOpacity style={styles.cancelButton} onPress={onClose}>
               <Text style={styles.cancelText}>Cancel</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.saveButton} onPress={onSave}>
+            <TouchableOpacity
+              style={[
+                styles.saveButton,
+                accentColor && { backgroundColor: accentColor },
+              ]}
+              onPress={onSave}
+              disabled={savingName}
+            >
               <Text style={styles.saveText}>
                 {savingName ? "Saving..." : "Save"}
               </Text>

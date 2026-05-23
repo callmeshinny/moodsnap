@@ -10,6 +10,23 @@ import {
 } from "react-native";
 import { profileStyles as styles } from "./profileStyles";
 
+function FriendAvatar({ user }) {
+  const displayName = user?.displayLabel || user?.username || "MoodSnap user";
+  const accentColor = user?.profileColor || "#F65078";
+
+  return (
+    <View style={[styles.friendAvatar, { borderColor: accentColor }]}>
+      {user?.avatarUrl ? (
+        <Image source={{ uri: user.avatarUrl }} style={styles.friendAvatarImage} />
+      ) : (
+        <Text style={styles.friendAvatarInitial}>
+          {displayName?.[0]?.toUpperCase() || "?"}
+        </Text>
+      )}
+    </View>
+  );
+}
+
 export default function FriendsModal({
   visible,
   onClose,
@@ -103,18 +120,7 @@ export default function FriendsModal({
               ) : (
                 pendingRequests.map((request) => (
                   <View key={request.id} style={styles.friendRow}>
-                    <View style={styles.friendAvatar}>
-                      {request.sender?.avatarUrl ? (
-                        <Image
-                          source={{ uri: request.sender.avatarUrl }}
-                          style={styles.friendAvatarImage}
-                        />
-                      ) : (
-                        <Text style={styles.friendAvatarInitial}>
-                          {request.sender?.username?.[0]?.toUpperCase() || "?"}
-                        </Text>
-                      )}
-                    </View>
+                    <FriendAvatar user={request.sender} />
 
                     <View style={styles.friendInfo}>
                       <Text style={styles.friendName}>
@@ -122,12 +128,24 @@ export default function FriendsModal({
                           request.sender?.username ||
                           "MoodSnap user"}
                       </Text>
-                      <Text style={styles.friendMeta}>
+                      <Text
+                        style={[
+                          styles.friendMeta,
+                          request.sender?.profileColor && {
+                            color: request.sender.profileColor,
+                          },
+                        ]}
+                      >
                         @{request.sender?.username || "unknown"}
                       </Text>
                       <View style={styles.friendActionRow}>
                         <TouchableOpacity
-                          style={styles.acceptButton}
+                          style={[
+                            styles.acceptButton,
+                            request.sender?.profileColor && {
+                              backgroundColor: request.sender.profileColor,
+                            },
+                          ]}
                           onPress={() => onAcceptRequest(request.id)}
                         >
                           <Text style={styles.acceptText}>Accept</Text>
@@ -152,24 +170,20 @@ export default function FriendsModal({
               ) : (
                 acceptedFriends.map((friend) => (
                   <View key={friend.id} style={styles.friendRow}>
-                    <View style={styles.friendAvatar}>
-                      {friend.avatarUrl ? (
-                        <Image
-                          source={{ uri: friend.avatarUrl }}
-                          style={styles.friendAvatarImage}
-                        />
-                      ) : (
-                        <Text style={styles.friendAvatarInitial}>
-                          {friend.username?.[0]?.toUpperCase() || "?"}
-                        </Text>
-                      )}
-                    </View>
+                    <FriendAvatar user={friend} />
 
                     <View style={styles.friendInfo}>
                       <Text style={styles.friendName}>
                         {friend.displayLabel || friend.username || "MoodSnap user"}
                       </Text>
-                      <Text style={styles.friendMeta}>@{friend.username}</Text>
+                      <Text
+                        style={[
+                          styles.friendMeta,
+                          friend.profileColor && { color: friend.profileColor },
+                        ]}
+                      >
+                        @{friend.username}
+                      </Text>
                       <View style={styles.friendActionRow}>
                         <TouchableOpacity
                           style={styles.rejectButton}
