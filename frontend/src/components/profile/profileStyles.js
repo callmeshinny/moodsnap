@@ -362,6 +362,17 @@ export const profileStyles = StyleSheet.create({
   friendsList: {
     maxHeight: 430,
   },
+  friendsSectionTitle: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "900",
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  retryBox: {
+    alignItems: "flex-start",
+    gap: 10,
+  },
   friendRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -403,6 +414,23 @@ export const profileStyles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "800",
     marginTop: 3,
+  },
+  friendActionRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 10,
+  },
+  reportButton: {
+    borderRadius: 14,
+    backgroundColor: "#2a1118",
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
+  reportText: {
+    color: "#ff6b8a",
+    fontWeight: "900",
+    fontSize: 12,
   },
   friendsEmptyText: {
     color: "#aaa",

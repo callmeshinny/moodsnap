@@ -1,6 +1,7 @@
 import React, { useCallback, useContext, useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Dimensions,
   FlatList,
   Modal,
@@ -12,7 +13,7 @@ import {
 } from "react-native";
 import { Image } from "expo-image";
 import { router } from "expo-router";
-import { getFeedApi } from "../../api/snapApi";
+import { deleteSnapApi, getFeedApi } from "../../api/snapApi";
 import CustomButton from "../../components/CustomButton";
 import MutedText from "../../components/MutedText";
 import { AuthContext } from "../../context/AuthContext";
@@ -39,9 +40,15 @@ const Avatar = React.memo(function Avatar({ user }) {
   );
 });
 
-const FeedCard = React.memo(function FeedCard({ item, onOpen }) {
+const FeedCard = React.memo(function FeedCard({
+  item,
+  onOpen,
+  currentUserId,
+  onDelete,
+}) {
   const mood = getMoodMeta(item.mood);
-  const name = item.user?.username || "MoodSnap user";
+  const name = item.user?.displayLabel || item.user?.username || "MoodSnap user";
+  const canDelete = currentUserId && item.userId === currentUserId;
 
   return (
     <TouchableOpacity
@@ -52,7 +59,21 @@ const FeedCard = React.memo(function FeedCard({ item, onOpen }) {
       accessibilityLabel={`Open snap from ${name}`}
     >
       <Image source={{ uri: item.imageUrl }} style={styles.cardImage} contentFit="cover" />
+      {item.softFilterEnabled ? (
+        <View pointerEvents="none" style={styles.softFilterOverlay} />
+      ) : null}
       <View style={styles.cardScrim} />
+      {canDelete ? (
+        <TouchableOpacity
+          style={styles.deletePill}
+          onPress={() => onDelete(item)}
+          activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel="Delete this snap"
+        >
+          <Text style={styles.deletePillText}>Delete</Text>
+        </TouchableOpacity>
+      ) : null}
       <View style={styles.cardTopText}>
         <Text style={styles.cardTime}>{formatUploadTime(item.createdAt)}</Text>
         {!!item.caption && (
@@ -120,7 +141,7 @@ function FeedEmptyState({ friendCount, onRetry, showRetry }) {
 }
 
 export default function FeedScreen() {
-  const { feedRefreshKey, friendCount } = useContext(AuthContext);
+  const { feedRefreshKey, friendCount, user, refreshFeed } = useContext(AuthContext);
   const [snaps, setSnaps] = useState([]);
   const [nextCursor, setNextCursor] = useState(null);
   const [selectedSnap, setSelectedSnap] = useState(null);
@@ -173,9 +194,39 @@ export default function FeedScreen() {
     }
   };
 
+  const handleDeleteSnap = (snap) => {
+    Alert.alert("Delete this snap?", "This removes the photo from MoodSnap.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await deleteSnapApi(snap.id);
+            setSnaps((current) => current.filter((item) => item.id !== snap.id));
+            setSelectedSnap(null);
+            refreshFeed?.();
+          } catch (deleteError) {
+            Alert.alert(
+              "Delete failed",
+              deleteError.message || "Could not delete this snap."
+            );
+          }
+        },
+      },
+    ]);
+  };
+
   const renderItem = useCallback(
-    ({ item }) => <FeedCard item={item} onOpen={setSelectedSnap} />,
-    []
+    ({ item }) => (
+      <FeedCard
+        item={item}
+        onOpen={setSelectedSnap}
+        currentUserId={user?.id}
+        onDelete={handleDeleteSnap}
+      />
+    ),
+    [user?.id]
   );
 
   useEffect(() => {
@@ -261,9 +312,23 @@ export default function FeedScreen() {
                   style={styles.modalImage}
                   contentFit="contain"
                 />
+                {selectedSnap.softFilterEnabled ? (
+                  <View pointerEvents="none" style={styles.modalSoftFilterOverlay} />
+                ) : null}
                 <Text style={styles.modalTitle}>
-                  {selectedSnap.user?.username || "MoodSnap user"}
+                  {selectedSnap.user?.displayLabel ||
+                    selectedSnap.user?.username ||
+                    "MoodSnap user"}
                 </Text>
+                {selectedSnap.userId === user?.id ? (
+                  <TouchableOpacity
+                    style={styles.modalDeleteButton}
+                    onPress={() => handleDeleteSnap(selectedSnap)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.modalDeleteText}>Delete snap</Text>
+                  </TouchableOpacity>
+                ) : null}
                 <Text style={styles.modalMeta}>
                   {formatUploadTime(selectedSnap.createdAt)} ·{" "}
                   {getMoodMeta(selectedSnap.mood).emoji} {selectedSnap.mood}
@@ -350,6 +415,25 @@ const styles = StyleSheet.create({
   cardScrim: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(0,0,0,0.18)",
+  },
+  softFilterOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(255,205,221,0.13)",
+  },
+  deletePill: {
+    position: "absolute",
+    top: 14,
+    right: 14,
+    zIndex: 4,
+    borderRadius: 999,
+    backgroundColor: "rgba(0,0,0,0.62)",
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  deletePillText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "900",
   },
   cardTime: {
     color: "#fff",
@@ -495,6 +579,16 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     backgroundColor: "#050505",
   },
+  modalSoftFilterOverlay: {
+    position: "absolute",
+    left: 14,
+    right: 14,
+    top: 14,
+    height: height * 0.62,
+    borderRadius: 24,
+    backgroundColor: "rgba(255,205,221,0.13)",
+    zIndex: 1,
+  },
   modalTitle: {
     color: "#fff",
     fontSize: 22,
@@ -507,6 +601,17 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     lineHeight: 22,
     marginTop: 10,
+  },
+  modalDeleteButton: {
+    borderRadius: 16,
+    backgroundColor: "#2a1118",
+    paddingVertical: 12,
+    alignItems: "center",
+    marginTop: 14,
+  },
+  modalDeleteText: {
+    color: COLORS.danger,
+    fontWeight: "900",
   },
   modalMeta: {
     color: "#aaa",

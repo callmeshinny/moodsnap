@@ -16,6 +16,7 @@ import { COLORS } from "../../constants/colors";
 
 export default function SignUpScreen() {
   const [username, setUsername] = useState("");
+  const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
@@ -32,6 +33,7 @@ export default function SignUpScreen() {
 
       const result = await signUpApi({
         username,
+        displayName,
         email,
         password
       });
@@ -67,6 +69,13 @@ export default function SignUpScreen() {
         placeholder="Username"
         value={username}
         onChangeText={setUsername}
+        autoCapitalize="none"
+      />
+
+      <CustomInput
+        placeholder="Display name (optional)"
+        value={displayName}
+        onChangeText={setDisplayName}
       />
 
       <CustomInput

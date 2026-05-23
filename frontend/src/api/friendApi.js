@@ -20,8 +20,10 @@ export const getFriendRequestsApi = async () => {
   return response.data;
 };
 
-export const sendFriendRequestApi = async (receiverId) => {
-  const response = await apiClient.post("/friends/request", { receiverId });
+export const sendFriendRequestApi = async (receiverIdOrUsername) => {
+  const response = await apiClient.post("/friends/request", {
+    receiverIdOrUsername,
+  });
   return response.data;
 };
 
@@ -43,3 +45,23 @@ export const checkFriendStatusApi = async (receiverId) => {
   return response.data;
 };
 
+export const unfriendApi = async (friendUserId) => {
+  const response = await apiClient.delete(
+    `/friends/${encodeURIComponent(friendUserId)}`
+  );
+  return response.data;
+};
+
+export const blockUserApi = async (blockedUserId) => {
+  const response = await apiClient.post("/friends/block", { blockedUserId });
+  return response.data;
+};
+
+export const reportUserApi = async ({ reportedUserId, reason, details }) => {
+  const response = await apiClient.post("/friends/report", {
+    reportedUserId,
+    reason,
+    details,
+  });
+  return response.data;
+};

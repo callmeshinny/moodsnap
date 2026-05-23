@@ -64,6 +64,7 @@ coverage/
 # Cloudinary / Supabase local dump or backup files
 *.sql
 !backend/sql/*.sql
+!backend/supabase/*.sql
 *.dump
 *.backup
 

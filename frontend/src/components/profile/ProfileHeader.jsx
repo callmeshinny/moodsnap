@@ -13,7 +13,7 @@ export default function ProfileHeader({
   onShareFriendLink,
   onOpenColorPicker,
 }) {
-  const displayName = user?.username || "MoodSnap user";
+  const displayName = user?.displayLabel || user?.username || "MoodSnap user";
 
   return (
     <View style={styles.profileHeader}>

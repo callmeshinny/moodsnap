@@ -40,6 +40,9 @@ export default function CameraScreen() {
   const [caption, setCaption] = useState("");
   const [posting, setPosting] = useState(false);
   const [cameraFacing, setCameraFacing] = useState("back");
+  const [flashEnabled, setFlashEnabled] = useState(false);
+  const [softFilterEnabled, setSoftFilterEnabled] = useState(false);
+  const [screenFlashVisible, setScreenFlashVisible] = useState(false);
   const [friendModalVisible, setFriendModalVisible] = useState(false);
   const [friendLinkInput, setFriendLinkInput] = useState("");
   const [sendingFriendRequest, setSendingFriendRequest] = useState(false);
@@ -48,6 +51,10 @@ export default function CameraScreen() {
     setCameraFacing((current) => (current === "back" ? "front" : "back"));
   };
 
+  const wait = (duration) =>
+    new Promise((resolve) => {
+      setTimeout(resolve, duration);
+    });
 
   const handleOpenAddFriend = () => {
     setFriendLinkInput("");
@@ -103,10 +110,17 @@ export default function CameraScreen() {
         }
       }
 
+      if (flashEnabled && cameraFacing === "front") {
+        setScreenFlashVisible(true);
+        await wait(140);
+      }
+
       const photo = await cameraRef.current?.takePictureAsync({
         quality: 0.85,
         mirror: false,
       });
+
+      setScreenFlashVisible(false);
 
       if (!photo?.uri) {
         throw new Error("Could not capture photo");
@@ -117,6 +131,7 @@ export default function CameraScreen() {
       setSelectedMood(null);
       setCaption("");
     } catch (error) {
+      setScreenFlashVisible(false);
       const message =
         error instanceof Error ? error.message : "Could not capture photo";
 
@@ -152,6 +167,7 @@ export default function CameraScreen() {
         imageUri: compressedUri,
         mood: selectedMood.label,
         caption: caption.trim(),
+        softFilterEnabled,
       });
 
       Alert.alert(
@@ -250,7 +266,38 @@ export default function CameraScreen() {
               style={styles.camera}
               facing={cameraFacing}
               mirror={cameraFacing === "front"}
+              flash={flashEnabled ? "on" : "off"}
+              enableTorch={flashEnabled && cameraFacing === "back"}
             />
+            {softFilterEnabled && <View pointerEvents="none" style={styles.softFilterOverlay} />}
+            {screenFlashVisible && <View pointerEvents="none" style={styles.screenFlash} />}
+
+            <View style={styles.cameraToolRow}>
+              <TouchableOpacity
+                style={[
+                  styles.cameraToolButton,
+                  flashEnabled && styles.cameraToolButtonActive,
+                ]}
+                onPress={() => setFlashEnabled((current) => !current)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.cameraToolText}>
+                  {flashEnabled ? "Flash on" : "Flash"}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.cameraToolButton,
+                  softFilterEnabled && styles.cameraToolButtonActive,
+                ]}
+                onPress={() => setSoftFilterEnabled((current) => !current)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.cameraToolText}>Soft</Text>
+              </TouchableOpacity>
+            </View>
+
             <TouchableOpacity
               style={styles.flipButton}
               onPress={handleFlipCamera}
@@ -261,7 +308,12 @@ export default function CameraScreen() {
           </>
         ) : (
           <>
-            <Image source={{ uri: capturedImageUri }} style={styles.camera} />
+            <Image
+              source={{ uri: capturedImageUri }}
+              style={styles.camera}
+              blurRadius={softFilterEnabled ? 0.4 : 0}
+            />
+            {softFilterEnabled && <View pointerEvents="none" style={styles.softFilterOverlay} />}
 
             {selectedMood && (
               <View
@@ -475,6 +527,43 @@ const styles = StyleSheet.create({
     fontSize: 30,
     fontWeight: "900",
     lineHeight: 32,
+  },
+  cameraToolRow: {
+    position: "absolute",
+    left: 18,
+    bottom: 22,
+    flexDirection: "row",
+    gap: 10,
+    zIndex: 3,
+  },
+  cameraToolButton: {
+    minWidth: 70,
+    borderRadius: 999,
+    paddingHorizontal: 13,
+    paddingVertical: 10,
+    backgroundColor: "rgba(0,0,0,0.58)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.14)",
+    alignItems: "center",
+  },
+  cameraToolButtonActive: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  cameraToolText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "900",
+  },
+  softFilterOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(255,205,221,0.13)",
+    zIndex: 1,
+  },
+  screenFlash: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(255,255,255,0.92)",
+    zIndex: 8,
   },
   selectedMoodTopBadge: {
     position: "absolute",

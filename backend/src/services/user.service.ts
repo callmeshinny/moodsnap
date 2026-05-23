@@ -1,10 +1,13 @@
 import { supabase } from "../config/supabase";
 import cloudinary from "../config/cloudinary";
 import { uploadImageToCloudinary } from "./upload.service";
+import { isValidUsername, normalizeUsername } from "../utils/auth.helpers";
 
 export type UserRecord = {
   id: string;
   username: string;
+  username_normalized?: string | null;
+  display_name?: string | null;
   email: string;
   avatar_url?: string | null;
   avatar_public_id?: string | null;
@@ -16,6 +19,9 @@ export type UserRecord = {
   updated_at?: string;
 };
 
+const USER_SELECT =
+  "id, username, username_normalized, display_name, email, avatar_url, avatar_public_id, profile_color, timezone, calendar_mode, is_verified, created_at, updated_at";
+
 export const isUuid = (value: string) => {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
     value
@@ -25,6 +31,8 @@ export const isUuid = (value: string) => {
 export const mapUser = (user: UserRecord) => ({
   id: user.id,
   username: user.username,
+  displayName: user.display_name || null,
+  displayLabel: user.display_name?.trim() || user.username,
   email: user.email,
   avatarUrl: user.avatar_url || null,
   avatarPublicId: user.avatar_public_id || null,
@@ -39,7 +47,7 @@ export const mapUser = (user: UserRecord) => ({
 export const getUserById = async (userId: string) => {
   const { data: user, error } = await supabase
     .from("users")
-    .select("id, username, email, avatar_url, avatar_public_id, profile_color, timezone, calendar_mode, is_verified, created_at, updated_at")
+    .select(USER_SELECT)
     .eq("id", userId)
     .single();
 
@@ -51,10 +59,12 @@ export const getUserById = async (userId: string) => {
 };
 
 export const getUserByUsername = async (username: string) => {
+  const normalizedUsername = normalizeUsername(username);
+
   const { data: user, error } = await supabase
     .from("users")
-    .select("id, username, email, avatar_url, avatar_public_id, profile_color, timezone, calendar_mode, is_verified, created_at, updated_at")
-    .eq("username", username)
+    .select(USER_SELECT)
+    .eq("username_normalized", normalizedUsername)
     .maybeSingle();
 
   if (error) {
@@ -66,21 +76,54 @@ export const getUserByUsername = async (username: string) => {
 
 export const updateUserProfile = async (
   userId: string,
-  input: { username?: unknown; profileColor?: unknown }
+  input: { username?: unknown; displayName?: unknown; profileColor?: unknown }
 ) => {
   const updates: Record<string, string> = {
     updated_at: new Date().toISOString(),
   };
 
   if (typeof input.username === "string") {
-    updates.username = input.username;
+    const username = input.username.trim();
+
+    if (!username) {
+      throw new Error("Username is required");
+    }
+
+    if (!isValidUsername(username)) {
+      throw new Error(
+        "Username can only contain letters, numbers, underscore, and dot"
+      );
+    }
+
+    const usernameNormalized = normalizeUsername(username);
+    const { data: owner, error: ownerError } = await supabase
+      .from("users")
+      .select("id")
+      .eq("username_normalized", usernameNormalized)
+      .neq("id", userId)
+      .maybeSingle();
+
+    if (ownerError) {
+      throw new Error(ownerError.message);
+    }
+
+    if (owner) {
+      throw new Error("Username is already taken.");
+    }
+
+    updates.username = username;
+    updates.username_normalized = usernameNormalized;
+  }
+
+  if (typeof input.displayName === "string") {
+    updates.display_name = input.displayName.trim();
   }
 
   if (typeof input.profileColor === "string") {
     updates.profile_color = input.profileColor;
   }
 
-  if (!updates.username && !updates.profile_color) {
+  if (!updates.username && !updates.display_name && !updates.profile_color) {
     throw new Error("Nothing to update");
   }
 
@@ -88,7 +131,7 @@ export const updateUserProfile = async (
     .from("users")
     .update(updates)
     .eq("id", userId)
-    .select("id, username, email, avatar_url, avatar_public_id, profile_color, timezone, calendar_mode, is_verified, created_at, updated_at")
+    .select(USER_SELECT)
     .single();
 
   if (error && error.message?.includes("profile_color")) {
@@ -99,7 +142,7 @@ export const updateUserProfile = async (
       .from("users")
       .update(fallbackUpdates)
       .eq("id", userId)
-      .select("id, username, email, avatar_url, avatar_public_id, profile_color, timezone, calendar_mode, is_verified, created_at, updated_at")
+      .select(USER_SELECT)
       .single();
 
     user = fallback.data as any;
@@ -126,7 +169,7 @@ export const getUsersByIds = async (userIds: string[]) => {
 
   const { data: users, error } = await supabase
     .from("users")
-    .select("id, username, email, avatar_url, avatar_public_id, profile_color, timezone, calendar_mode, is_verified, created_at, updated_at")
+    .select(USER_SELECT)
     .in("id", uniqueIds);
 
   if (error) {
@@ -160,7 +203,7 @@ export const updateUserProfilePhoto = async (
       updated_at: new Date().toISOString(),
     })
     .eq("id", userId)
-    .select("id, username, email, avatar_url, avatar_public_id, profile_color, timezone, calendar_mode, is_verified, created_at, updated_at")
+    .select(USER_SELECT)
     .single();
 
   if (error && error.message?.includes("avatar_public_id")) {
@@ -171,7 +214,7 @@ export const updateUserProfilePhoto = async (
         updated_at: new Date().toISOString(),
       })
       .eq("id", userId)
-      .select("id, username, email, avatar_url, profile_color, timezone, calendar_mode, is_verified, created_at, updated_at")
+      .select(USER_SELECT)
       .single();
 
     user = fallback.data as any;
@@ -237,14 +280,26 @@ export const deleteUserAccount = async (userId: string) => {
     throw new Error(friendshipDeleteError.message);
   }
 
-  const { error: otpDeleteError } = await supabase
-    .from("otps")
+  const { error: blockedDeleteError } = await supabase
+    .from("blocked_users")
+    .delete()
+    .or(`blocker_id.eq.${userId},blocked_user_id.eq.${userId}`);
+
+  if (blockedDeleteError && !blockedDeleteError.message.includes("does not exist")) {
+    throw new Error(blockedDeleteError.message);
+  }
+
+  await supabase
+    .from("pending_registrations")
     .delete()
     .eq("email", user.email);
 
-  if (otpDeleteError) {
-    throw new Error(otpDeleteError.message);
-  }
+  await supabase
+    .from("password_reset_otps")
+    .delete()
+    .eq("email", user.email);
+
+  await supabase.from("otps").delete().eq("email", user.email);
 
   const { error: userDeleteError } = await supabase
     .from("users")

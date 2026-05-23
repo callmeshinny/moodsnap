@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { uploadImageToCloudinary } from "../services/upload.service";
 import { supabase } from "../config/supabase";
+import cloudinary from "../config/cloudinary";
 import { getUsersByIds } from "../services/user.service";
 import { getVisibleSnapUserIds } from "../services/friend.service";
 
@@ -13,13 +14,14 @@ const mapSnap = (snap: any, user: any = null) => ({
   caption: snap.caption,
   imageUrl: snap.image_url,
   imagePublicId: snap.cloudinary_public_id || snap.image_public_id,
+  softFilterEnabled: Boolean(snap.soft_filter_enabled),
   createdAt: snap.created_at,
   user,
 });
 
 export const createSnap = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { mood, caption } = req.body;
+    const { mood, caption, softFilterEnabled } = req.body;
     const userId = req.user?.id;
 
     if (!userId) {
@@ -57,6 +59,8 @@ export const createSnap = async (req: Request, res: Response): Promise<void> => 
         image_url: uploadedImage.secure_url,
         image_public_id: uploadedImage.public_id,
         cloudinary_public_id: uploadedImage.public_id,
+        soft_filter_enabled:
+          softFilterEnabled === true || softFilterEnabled === "true",
         created_at: new Date().toISOString(),
       })
       .select()
@@ -69,6 +73,7 @@ export const createSnap = async (req: Request, res: Response): Promise<void> => 
     res.status(201).json({
       success: true,
       message: "Snap uploaded to Cloudinary and saved to Supabase successfully",
+      data: { snap: mapSnap(snap) },
       snap: mapSnap(snap),
     });
   } catch (error) {
@@ -110,11 +115,14 @@ export const getSnaps = async (req: Request, res: Response): Promise<void> => {
     const rows = snaps || [];
     const usersById = await getUsersByIds(rows.map((snap) => String(snap.user_id)));
 
+    const mappedSnaps = rows.map((snap) =>
+      mapSnap(snap, usersById.get(String(snap.user_id)) || null)
+    );
+
     res.status(200).json({
       success: true,
-      snaps: rows.map((snap) =>
-        mapSnap(snap, usersById.get(String(snap.user_id)) || null)
-      ),
+      data: { snaps: mappedSnaps },
+      snaps: mappedSnaps,
     });
   } catch (error) {
     const message =
@@ -180,6 +188,7 @@ export const getFeed = async (req: Request, res: Response): Promise<void> => {
 
     res.status(200).json({
       success: true,
+      data: { snaps: feed, nextCursor },
       snaps: feed,
       nextCursor,
     });
@@ -222,15 +231,26 @@ export const deleteSnap = async (req: Request, res: Response): Promise<void> => 
       return;
     }
 
-    await supabase
+    const { error: deleteError } = await supabase
       .from(TABLE_NAME)
       .delete()
       .eq("id", id)
       .eq("user_id", userId);
 
+    if (deleteError) {
+      throw new Error(deleteError.message);
+    }
+
+    const publicId = snap.cloudinary_public_id || snap.image_public_id;
+
+    if (publicId) {
+      await cloudinary.uploader.destroy(publicId).catch(() => null);
+    }
+
     res.status(200).json({
       success: true,
-      message: "Snap deleted from Supabase. Cloudinary delete can be added later.",
+      message: "Snap deleted successfully.",
+      data: { id },
     });
   } catch (error) {
     const message =

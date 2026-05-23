@@ -14,6 +14,7 @@ import CustomInput from "../../components/CustomInput";
 import {
   forgotPasswordApi,
   resetPasswordApi,
+  verifyPasswordOtpApi,
 } from "../../api/authApi";
 import { COLORS } from "../../constants/colors";
 
@@ -23,6 +24,7 @@ export default function ForgotPasswordScreen() {
   const [otp, setOtp] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [resetToken, setResetToken] = useState("");
   const [loading, setLoading] = useState(false);
 
   const handleSendOtp = async () => {
@@ -33,6 +35,10 @@ export default function ForgotPasswordScreen() {
 
     try {
       setLoading(true);
+      setOtp("");
+      setResetToken("");
+      setNewPassword("");
+      setConfirmPassword("");
       await forgotPasswordApi(email.trim());
       Alert.alert("OTP sent", "Please check your email for the reset code.");
       setStep("otp");
@@ -46,13 +52,33 @@ export default function ForgotPasswordScreen() {
     }
   };
 
-  const handleVerifyOtp = () => {
-    if (!otp.trim()) {
-      Alert.alert("Missing OTP", "Please enter the OTP from your email.");
+  const handleVerifyOtp = async () => {
+    if (!/^\d{6}$/.test(otp.trim())) {
+      Alert.alert("Invalid OTP", "Please enter the 6-digit OTP from your email.");
       return;
     }
 
-    setStep("password");
+    try {
+      setLoading(true);
+      const result = await verifyPasswordOtpApi({
+        email: email.trim(),
+        otp: otp.trim(),
+      });
+
+      setResetToken(result.resetToken);
+      Alert.alert(
+        "OTP verified",
+        result.message || "You can now reset your password."
+      );
+      setStep("password");
+    } catch (error) {
+      Alert.alert(
+        "Verify failed",
+        error.response?.data?.message || "Please check your OTP and try again."
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleResetPassword = async () => {
@@ -74,8 +100,7 @@ export default function ForgotPasswordScreen() {
     try {
       setLoading(true);
       await resetPasswordApi({
-        email: email.trim(),
-        otp: otp.trim(),
+        resetToken,
         newPassword,
       });
 

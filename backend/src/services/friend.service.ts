@@ -25,6 +25,29 @@ const mapFriendship = (friendship: FriendshipRecord) => ({
   updatedAt: friendship.updated_at,
 });
 
+const getUserFromIdentifier = async (identifier: string) => {
+  return (
+    (await getUserByUsername(identifier)) ||
+    (await getUserById(identifier).catch(() => null))
+  );
+};
+
+const areUsersBlocked = async (firstUserId: string, secondUserId: string) => {
+  const { data, error } = await supabase
+    .from("blocked_users")
+    .select("id")
+    .or(
+      `and(blocker_id.eq.${firstUserId},blocked_user_id.eq.${secondUserId}),and(blocker_id.eq.${secondUserId},blocked_user_id.eq.${firstUserId})`
+    )
+    .limit(1);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return Boolean(data?.length);
+};
+
 export const getFriendLink = async (userId: string) => {
   const user = await getUserById(userId);
 
@@ -44,9 +67,7 @@ export const sendFriendRequest = async (
   }
 
   const receiverIdentifier = receiverId.trim();
-  const receiver =
-    (await getUserByUsername(receiverIdentifier)) ||
-    (await getUserById(receiverIdentifier).catch(() => null));
+  const receiver = await getUserFromIdentifier(receiverIdentifier);
 
   if (!receiver) {
     throw new Error("User not found");
@@ -56,6 +77,10 @@ export const sendFriendRequest = async (
 
   if (senderId === targetUserId) {
     throw new Error("You cannot add yourself as a friend");
+  }
+
+  if (await areUsersBlocked(senderId, targetUserId)) {
+    throw new Error("You cannot add this user.");
   }
 
   const [userOneId, userTwoId] = orderedPair(senderId, targetUserId);
@@ -226,6 +251,10 @@ export const areAcceptedFriends = async (
     return true;
   }
 
+  if (await areUsersBlocked(firstUserId, secondUserId)) {
+    return false;
+  }
+
   const [userOneId, userTwoId] = orderedPair(firstUserId, secondUserId);
 
   const { data, error } = await supabase
@@ -253,9 +282,7 @@ export const getFriendStatus = async (
   }
 
   const receiverIdentifier = receiverId.trim();
-  const receiver =
-    (await getUserByUsername(receiverIdentifier)) ||
-    (await getUserById(receiverIdentifier).catch(() => null));
+  const receiver = await getUserFromIdentifier(receiverIdentifier);
 
   if (!receiver) {
     throw new Error("User not found");
@@ -267,6 +294,16 @@ export const getFriendStatus = async (
       status: "self",
       alreadyFriends: false,
       pending: false,
+    };
+  }
+
+  if (await areUsersBlocked(currentUserId, receiver.id)) {
+    return {
+      targetUser: receiver,
+      status: "blocked",
+      alreadyFriends: false,
+      pending: false,
+      friendship: null,
     };
   }
 
@@ -326,7 +363,19 @@ export const getAcceptedFriends = async (userId: string) => {
   const usersById = await getUsersByIds(friendIds);
 
   return friendIds
-    .map((friendId) => usersById.get(friendId))
+    .map((friendId) => {
+      const user = usersById.get(friendId);
+      const friendship = (friendships || []).find(
+        (item) => item.user_one_id === friendId || item.user_two_id === friendId
+      );
+
+      return user
+        ? {
+            ...user,
+            friendshipId: friendship?.id || null,
+          }
+        : null;
+    })
     .filter(Boolean);
 };
 
@@ -350,10 +399,150 @@ export const getAcceptedFriendIds = async (userId: string): Promise<string[]> =>
     .filter(Boolean);
 };
 
+export const removeFriend = async (
+  currentUserId: string,
+  friendUserId: unknown
+) => {
+  if (typeof friendUserId !== "string" || !friendUserId.trim()) {
+    throw new Error("Friend user id is required");
+  }
+
+  const targetUserId = friendUserId.trim();
+  const [userOneId, userTwoId] = orderedPair(currentUserId, targetUserId);
+
+  const { data: friendship, error: findError } = await supabase
+    .from("friendships")
+    .select("*")
+    .eq("user_one_id", userOneId)
+    .eq("user_two_id", userTwoId)
+    .eq("status", "accepted")
+    .maybeSingle();
+
+  if (findError) {
+    throw new Error(findError.message);
+  }
+
+  if (!friendship) {
+    throw new Error("Friendship not found");
+  }
+
+  const { error } = await supabase
+    .from("friendships")
+    .delete()
+    .eq("id", friendship.id);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return true;
+};
+
+export const blockUser = async (
+  currentUserId: string,
+  blockedUserId: unknown
+) => {
+  if (typeof blockedUserId !== "string" || !blockedUserId.trim()) {
+    throw new Error("Blocked user id is required");
+  }
+
+  const targetUserId = blockedUserId.trim();
+
+  if (currentUserId === targetUserId) {
+    throw new Error("You cannot block yourself");
+  }
+
+  const [userOneId, userTwoId] = orderedPair(currentUserId, targetUserId);
+
+  const { error: upsertError } = await supabase
+    .from("blocked_users")
+    .upsert(
+      {
+        blocker_id: currentUserId,
+        blocked_user_id: targetUserId,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "blocker_id,blocked_user_id" }
+    );
+
+  if (upsertError) {
+    throw new Error(upsertError.message);
+  }
+
+  const { error: friendshipError } = await supabase
+    .from("friendships")
+    .delete()
+    .eq("user_one_id", userOneId)
+    .eq("user_two_id", userTwoId);
+
+  if (friendshipError) {
+    throw new Error(friendshipError.message);
+  }
+
+  return true;
+};
+
+export const reportUser = async (
+  reporterId: string,
+  reportedUserId: unknown,
+  reason?: unknown,
+  details?: unknown
+) => {
+  if (typeof reportedUserId !== "string" || !reportedUserId.trim()) {
+    throw new Error("Reported user id is required");
+  }
+
+  if (reporterId === reportedUserId.trim()) {
+    throw new Error("You cannot report yourself");
+  }
+
+  const { data: report, error } = await supabase
+    .from("user_reports")
+    .insert({
+      reporter_id: reporterId,
+      reported_user_id: reportedUserId.trim(),
+      reason: typeof reason === "string" ? reason.trim() || null : null,
+      details: typeof details === "string" ? details.trim() || null : null,
+    })
+    .select("*")
+    .single();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return {
+    id: report.id,
+    reporterId: report.reporter_id,
+    reportedUserId: report.reported_user_id,
+    reason: report.reason,
+    details: report.details,
+    createdAt: report.created_at,
+  };
+};
+
+const getBlockedCounterpartIds = async (userId: string): Promise<string[]> => {
+  const { data, error } = await supabase
+    .from("blocked_users")
+    .select("blocker_id, blocked_user_id")
+    .or(`blocker_id.eq.${userId},blocked_user_id.eq.${userId}`);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return (data || []).map((block) =>
+    block.blocker_id === userId ? block.blocked_user_id : block.blocker_id
+  );
+};
+
 export const getVisibleSnapUserIds = async (userId: string): Promise<string[]> => {
   try {
     const friendIds = await getAcceptedFriendIds(userId);
-    return Array.from(new Set([userId, ...friendIds]));
+    const blockedIds = new Set(await getBlockedCounterpartIds(userId));
+    return Array.from(
+      new Set([userId, ...friendIds.filter((friendId) => !blockedIds.has(friendId))])
+    );
   } catch {
     return [userId];
   }

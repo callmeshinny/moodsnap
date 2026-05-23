@@ -46,7 +46,12 @@ export const getFeedApi = async ({ cursor, limit = 20 } = {}) => {
   return data;
 };
 
-export const createSnapApi = async ({ imageUri, mood, caption }) => {
+export const createSnapApi = async ({
+  imageUri,
+  mood,
+  caption,
+  softFilterEnabled = false,
+}) => {
   const token = await getToken();
   const formData = new FormData();
 
@@ -61,6 +66,7 @@ export const createSnapApi = async ({ imageUri, mood, caption }) => {
   });
 
   formData.append("mood", mood);
+  formData.append("softFilterEnabled", softFilterEnabled ? "true" : "false");
 
   if (caption) {
     formData.append("caption", caption);
@@ -80,6 +86,28 @@ export const createSnapApi = async ({ imageUri, mood, caption }) => {
 
   if (!response.ok) {
     throw new Error(data.message || "Failed to create snap");
+  }
+
+  return data;
+};
+
+export const deleteSnapApi = async (snapId) => {
+  const token = await getToken();
+  const response = await fetch(
+    `${API_BASE_URL}/snaps/${encodeURIComponent(snapId)}`,
+    {
+      method: "DELETE",
+      headers: token
+        ? {
+            Authorization: `Bearer ${token}`,
+          }
+        : undefined,
+    }
+  );
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.message || "Failed to delete snap");
   }
 
   return data;

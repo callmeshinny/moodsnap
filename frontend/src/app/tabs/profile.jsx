@@ -13,10 +13,13 @@ import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
 import {
   acceptFriendRequestApi,
+  blockUserApi,
   getFriendRequestsApi,
   getFriendsApi,
+  reportUserApi,
   rejectFriendRequestApi,
   sendFriendRequestApi,
+  unfriendApi,
 } from "../../api/friendApi";
 import { deleteMeApi } from "../../api/userApi";
 import {
@@ -57,7 +60,9 @@ export default function ProfileScreen() {
     updateProfilePhoto,
   } = useContext(AuthContext);
   const [isEditingName, setIsEditingName] = useState(false);
-  const [draftName, setDraftName] = useState(user?.username || "");
+  const [draftName, setDraftName] = useState(
+    user?.displayName || user?.username || ""
+  );
   const [savingName, setSavingName] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [colorModalVisible, setColorModalVisible] = useState(false);
@@ -65,9 +70,11 @@ export default function ProfileScreen() {
   const [termsVisible, setTermsVisible] = useState(false);
   const [privacyVisible, setPrivacyVisible] = useState(false);
   const [friendRequests, setFriendRequests] = useState([]);
+  const [friendRequestsError, setFriendRequestsError] = useState("");
   const [friendsVisible, setFriendsVisible] = useState(false);
   const [friends, setFriends] = useState([]);
   const [loadingFriends, setLoadingFriends] = useState(false);
+  const [friendsError, setFriendsError] = useState("");
   const [friendLinkInput, setFriendLinkInput] = useState("");
   const [sendingFriendRequest, setSendingFriendRequest] = useState(false);
 
@@ -77,15 +84,15 @@ export default function ProfileScreen() {
   }, []);
 
   useEffect(() => {
-    setDraftName(user?.username || "");
-  }, [user?.username]);
+    setDraftName(user?.displayName || user?.username || "");
+  }, [user?.displayName, user?.username]);
 
   const displayFriendLink = buildDisplayFriendLink(user?.username) || "Loading share URL...";
   const shareFriendLink = buildShareFriendLink(user?.username);
   const profileColor = user?.profileColor || COLORS.primary;
 
   const getInviteMessage = () =>
-    `Add me on MoodSnap: ${displayFriendLink}\n${shareFriendLink}`;
+    `Add me on MoodSnap ${shareFriendLink || displayFriendLink} then share our mood`;
 
   const handleSignOut = async () => {
     Alert.alert("Sign out", "Are you sure you want to sign out?", [
@@ -212,7 +219,7 @@ export default function ProfileScreen() {
   const handleSaveName = async () => {
     try {
       setSavingName(true);
-      await updateUser?.({ username: draftName });
+      await updateUser?.({ displayName: draftName });
       setIsEditingName(false);
     } catch (error) {
       Alert.alert(
@@ -228,8 +235,10 @@ export default function ProfileScreen() {
     try {
       const result = await getFriendRequestsApi();
       setFriendRequests(result.requests || []);
+      setFriendRequestsError("");
     } catch {
       setFriendRequests([]);
+      setFriendRequestsError("Could not load friend requests.");
     }
   };
 
@@ -238,6 +247,10 @@ export default function ProfileScreen() {
       await acceptFriendRequestApi(requestId);
       await refreshAppData?.();
       await loadFriendRequests();
+      if (friendsVisible) {
+        const result = await getFriendsApi();
+        setFriends(result.friends || []);
+      }
     } catch (error) {
       Alert.alert(
         "Could not accept request",
@@ -264,14 +277,85 @@ export default function ProfileScreen() {
       setLoadingFriends(true);
       const result = await getFriendsApi();
       setFriends(result.friends || []);
+      setFriendsError("");
     } catch (error) {
       setFriends([]);
+      setFriendsError(
+        error.response?.data?.message || error.message || "Could not load friends."
+      );
       Alert.alert(
         "Could not load friends",
         error.response?.data?.message || error.message || "Please try again."
       );
     } finally {
       setLoadingFriends(false);
+    }
+  };
+
+  const refreshFriendsModal = async () => {
+    await Promise.allSettled([handleOpenFriends(), loadFriendRequests()]);
+  };
+
+  const handleUnfriend = (friend) => {
+    Alert.alert("Unfriend", `Remove ${friend.displayLabel || friend.username}?`, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Unfriend",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await unfriendApi(friend.id);
+            await refreshAppData?.();
+            await refreshFriendsModal();
+          } catch (error) {
+            Alert.alert(
+              "Could not unfriend",
+              error.response?.data?.message || error.message || "Please try again."
+            );
+          }
+        },
+      },
+    ]);
+  };
+
+  const handleBlock = (friend) => {
+    Alert.alert(
+      "Block user",
+      `Block ${friend.displayLabel || friend.username}? You will not see each other's snaps.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Block",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await blockUserApi(friend.id);
+              await refreshAppData?.();
+              await refreshFriendsModal();
+            } catch (error) {
+              Alert.alert(
+                "Could not block user",
+                error.response?.data?.message || error.message || "Please try again."
+              );
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleReport = async (friend) => {
+    try {
+      await reportUserApi({
+        reportedUserId: friend.id,
+        reason: "profile_report",
+      });
+      Alert.alert("Report submitted", "Thanks for helping keep MoodSnap safe.");
+    } catch (error) {
+      Alert.alert(
+        "Could not report user",
+        error.response?.data?.message || error.message || "Please try again."
+      );
     }
   };
 
@@ -386,6 +470,8 @@ export default function ProfileScreen() {
 
       <FriendRequestsSection
         friendRequests={friendRequests}
+        error={friendRequestsError}
+        onRetry={loadFriendRequests}
         onAccept={handleAcceptRequest}
         onReject={handleRejectRequest}
       />
@@ -441,6 +527,15 @@ export default function ProfileScreen() {
         onClose={() => setFriendsVisible(false)}
         friends={friends}
         loadingFriends={loadingFriends}
+        friendsError={friendsError}
+        friendRequests={friendRequests}
+        friendRequestsError={friendRequestsError}
+        onRetry={refreshFriendsModal}
+        onAcceptRequest={handleAcceptRequest}
+        onRejectRequest={handleRejectRequest}
+        onUnfriend={handleUnfriend}
+        onBlock={handleBlock}
+        onReport={handleReport}
         friendLinkInput={friendLinkInput}
         onChangeFriendLinkInput={setFriendLinkInput}
         onSubmitFriendLink={handleSubmitFriendLink}

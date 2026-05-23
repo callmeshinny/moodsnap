@@ -15,11 +15,23 @@ export default function FriendsModal({
   onClose,
   friends,
   loadingFriends,
+  friendsError,
+  friendRequests,
+  friendRequestsError,
+  onRetry,
+  onAcceptRequest,
+  onRejectRequest,
+  onUnfriend,
+  onBlock,
+  onReport,
   friendLinkInput,
   onChangeFriendLinkInput,
   onSubmitFriendLink,
   sendingFriendRequest,
 }) {
+  const pendingRequests = friendRequests || [];
+  const acceptedFriends = friends || [];
+
   return (
     <Modal
       visible={visible}
@@ -70,37 +82,118 @@ export default function FriendsModal({
             </TouchableOpacity>
           </View>
 
-          {loadingFriends ? (
+          {friendRequestsError || friendsError ? (
+            <View style={styles.retryBox}>
+              <Text style={styles.friendsEmptyText}>
+                {friendRequestsError || friendsError}
+              </Text>
+              <TouchableOpacity style={styles.addFriendButton} onPress={onRetry}>
+                <Text style={styles.addFriendButtonText}>Retry</Text>
+              </TouchableOpacity>
+            </View>
+          ) : loadingFriends ? (
             <Text style={styles.friendsEmptyText}>Loading friends...</Text>
-          ) : friends.length === 0 ? (
-            <Text style={styles.friendsEmptyText}>
-              No accepted friends yet.
-            </Text>
           ) : (
             <ScrollView style={styles.friendsList}>
-              {friends.map((friend) => (
-                <View key={friend.id} style={styles.friendRow}>
-                  <View style={styles.friendAvatar}>
-                    {friend.avatarUrl ? (
-                      <Image
-                        source={{ uri: friend.avatarUrl }}
-                        style={styles.friendAvatarImage}
-                      />
-                    ) : (
-                      <Text style={styles.friendAvatarInitial}>
-                        {friend.username?.[0]?.toUpperCase() || "?"}
-                      </Text>
-                    )}
-                  </View>
+              <Text style={styles.friendsSectionTitle}>Pending requests</Text>
+              {!pendingRequests.length ? (
+                <Text style={styles.friendsEmptyText}>
+                  No pending requests.
+                </Text>
+              ) : (
+                pendingRequests.map((request) => (
+                  <View key={request.id} style={styles.friendRow}>
+                    <View style={styles.friendAvatar}>
+                      {request.sender?.avatarUrl ? (
+                        <Image
+                          source={{ uri: request.sender.avatarUrl }}
+                          style={styles.friendAvatarImage}
+                        />
+                      ) : (
+                        <Text style={styles.friendAvatarInitial}>
+                          {request.sender?.username?.[0]?.toUpperCase() || "?"}
+                        </Text>
+                      )}
+                    </View>
 
-                  <View style={styles.friendInfo}>
-                    <Text style={styles.friendName}>
-                      {friend.username || "MoodSnap user"}
-                    </Text>
-                    <Text style={styles.friendMeta}>Accepted friend</Text>
+                    <View style={styles.friendInfo}>
+                      <Text style={styles.friendName}>
+                        {request.sender?.displayLabel ||
+                          request.sender?.username ||
+                          "MoodSnap user"}
+                      </Text>
+                      <Text style={styles.friendMeta}>
+                        @{request.sender?.username || "unknown"}
+                      </Text>
+                      <View style={styles.friendActionRow}>
+                        <TouchableOpacity
+                          style={styles.acceptButton}
+                          onPress={() => onAcceptRequest(request.id)}
+                        >
+                          <Text style={styles.acceptText}>Accept</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.rejectButton}
+                          onPress={() => onRejectRequest(request.id)}
+                        >
+                          <Text style={styles.rejectText}>Reject</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
                   </View>
-                </View>
-              ))}
+                ))
+              )}
+
+              <Text style={styles.friendsSectionTitle}>Accepted friends</Text>
+              {acceptedFriends.length === 0 ? (
+                <Text style={styles.friendsEmptyText}>
+                  No accepted friends yet.
+                </Text>
+              ) : (
+                acceptedFriends.map((friend) => (
+                  <View key={friend.id} style={styles.friendRow}>
+                    <View style={styles.friendAvatar}>
+                      {friend.avatarUrl ? (
+                        <Image
+                          source={{ uri: friend.avatarUrl }}
+                          style={styles.friendAvatarImage}
+                        />
+                      ) : (
+                        <Text style={styles.friendAvatarInitial}>
+                          {friend.username?.[0]?.toUpperCase() || "?"}
+                        </Text>
+                      )}
+                    </View>
+
+                    <View style={styles.friendInfo}>
+                      <Text style={styles.friendName}>
+                        {friend.displayLabel || friend.username || "MoodSnap user"}
+                      </Text>
+                      <Text style={styles.friendMeta}>@{friend.username}</Text>
+                      <View style={styles.friendActionRow}>
+                        <TouchableOpacity
+                          style={styles.rejectButton}
+                          onPress={() => onUnfriend(friend)}
+                        >
+                          <Text style={styles.rejectText}>Unfriend</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.rejectButton}
+                          onPress={() => onBlock(friend)}
+                        >
+                          <Text style={styles.rejectText}>Block</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.reportButton}
+                          onPress={() => onReport(friend)}
+                        >
+                          <Text style={styles.reportText}>Report</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  </View>
+                ))
+              )}
             </ScrollView>
           )}
         </View>
