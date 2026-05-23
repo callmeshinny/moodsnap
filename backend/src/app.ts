@@ -6,11 +6,14 @@ import moodRoutes from "./routes/mood.routes";
 import ratingRoutes from "./routes/rating.routes";
 import snapRoutes from "./routes/snap.routes";
 import userRoutes from "./routes/user.routes";
+import notificationRoutes from "./routes/notification.routes";
+import jobRoutes from "./routes/job.routes";
 
 const app = express();
 
 app.use(cors());
 app.use(express.json());
+app.use("/api/notifications", notificationRoutes);
 
 app.get("/", (_req, res) => {
   res.json({
@@ -102,5 +105,7 @@ app.use("/api/snaps", snapRoutes);
 app.use("/api/friends", friendRoutes);
 app.use("/api/moods", moodRoutes);
 app.use("/api/ratings", ratingRoutes);
+app.use("/api/notifications", notificationRoutes);
+app.use("/api/jobs", jobRoutes);
 
 export default app;

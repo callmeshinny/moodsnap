@@ -148,6 +148,37 @@ create table if not exists public.app_ratings (
   constraint app_ratings_user_unique unique (user_id)
 );
 
+
+create table if not exists public.notification_preferences (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.users(id) on delete cascade unique,
+  new_snap_enabled boolean not null default true,
+  reminders_enabled boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.notification_reminder_state (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.users(id) on delete cascade unique,
+  last_snap_at timestamptz,
+  sent_3h boolean not null default false,
+  sent_12h boolean not null default false,
+  sent_1d boolean not null default false,
+  sent_2d boolean not null default false,
+  sent_3d boolean not null default false,
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists notification_preferences_user_id_idx
+on public.notification_preferences (user_id);
+
+create index if not exists notification_reminder_state_user_id_idx
+on public.notification_reminder_state (user_id);
+
+create index if not exists notification_reminder_state_last_snap_at_idx
+on public.notification_reminder_state (last_snap_at);
+
 create unique index if not exists users_username_normalized_unique_idx
   on public.users (username_normalized);
 create unique index if not exists users_username_lower_unique_idx

@@ -15,4 +15,5 @@ router.get("/feed", authMiddleware, getFeed);
 router.post("/", authMiddleware, upload.single("image"), createSnap);
 router.delete("/:id", authMiddleware, deleteSnap);
 
+
 export default router;

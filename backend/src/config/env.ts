@@ -41,5 +41,8 @@ export const env = {
   cloudinaryApiSecret: requireEnv("CLOUDINARY_API_SECRET"),
 
   jwtSecret: requireEnv("JWT_SECRET"),
-  jwtExpiresIn: getEnv("JWT_EXPIRES_IN", "7d")
+  jwtExpiresIn: getEnv("JWT_EXPIRES_IN", "7d"),
+
+  publicAppUrl: getEnv("PUBLIC_APP_URL", "https://moodsnap-92ps.onrender.com"),
+  cronSecret: getEnv("CRON_SECRET")
 };

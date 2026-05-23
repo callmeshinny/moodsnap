@@ -4,6 +4,8 @@ import { supabase } from "../config/supabase";
 import cloudinary from "../config/cloudinary";
 import { getUsersByIds } from "../services/user.service";
 import { getVisibleSnapUserIds } from "../services/friend.service";
+import { sendNewSnapNotifications } from "../services/notification.service";
+import { resetReminderStateForSnap } from "../services/reminder.service";
 
 const TABLE_NAME = "moodsnap";
 
@@ -69,6 +71,14 @@ export const createSnap = async (req: Request, res: Response): Promise<void> => 
     if (error) {
       throw new Error(error.message);
     }
+
+    void resetReminderStateForSnap(userId, snap.created_at).catch((reminderError) => {
+      console.error("Failed to reset snap reminder state:", reminderError);
+    });
+
+    void sendNewSnapNotifications({ snap }).catch((notificationError) => {
+      console.error("Failed to send new snap notifications:", notificationError);
+    });
 
     res.status(201).json({
       success: true,

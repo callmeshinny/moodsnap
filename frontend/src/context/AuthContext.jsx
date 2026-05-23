@@ -1,10 +1,13 @@
 import React, { createContext, useEffect, useState } from "react";
 import { Alert } from "react-native";
 import { router } from "expo-router";
+import * as Notifications from "expo-notifications";
 import { getFriendCountApi, getFriendLinkApi } from "../api/friendApi";
 import { getMoodStreakApi } from "../api/moodApi";
 import { setUnauthorizedHandler } from "../api/sessionHandler";
 import { getMeApi, updateMeApi, uploadProfilePhotoApi } from "../api/userApi";
+import { registerCurrentDevicePushToken } from "../services/pushNotificationService";
+import NewSnapBanner from "../components/NewSnapBanner";
 import {
   getToken,
   getUser,
@@ -27,6 +30,7 @@ export function AuthProvider({ children }) {
   const [lastSnapAt, setLastSnapAt] = useState(null);
   const [todayKey, setTodayKey] = useState(null);
   const [feedRefreshKey, setFeedRefreshKey] = useState(0);
+  const [foregroundSnapNotification, setForegroundSnapNotification] = useState(null);
 
   const clearSession = async () => {
     await removeToken();
@@ -216,6 +220,70 @@ export function AuthProvider({ children }) {
     setFeedRefreshKey((current) => current + 1);
   };
 
+  useEffect(() => {
+    const subscription = Notifications.addNotificationReceivedListener(
+      (notification) => {
+        const data = notification.request.content.data || {};
+
+        if (data.type === "NEW_SNAP") {
+          setForegroundSnapNotification({
+            id: `${data.snapId || "snap"}-${Date.now()}`,
+            ...data,
+          });
+          refreshFeed?.();
+        }
+      }
+    );
+
+    return () => {
+      subscription.remove();
+    };
+  }, []);
+
+
+  useEffect(() => {
+    if (!token || !user?.id) {
+      return;
+    }
+
+    registerCurrentDevicePushToken().catch((error) => {
+      console.log("Could not register push token:", error?.message || error);
+    });
+  }, [token, user?.id]);
+
+  useEffect(() => {
+    const subscription = Notifications.addNotificationResponseReceivedListener(
+      (response) => {
+        const data = response.notification.request.content.data || {};
+
+        if (data.type === "NEW_SNAP") {
+          refreshFeed?.();
+          router.push({
+            pathname: "/tabs/feed",
+            params: data.snapId ? { snapId: String(data.snapId) } : undefined,
+          });
+        }
+      }
+    );
+
+    return () => {
+      subscription.remove();
+    };
+  }, []);
+
+
+  const handleOpenForegroundSnap = () => {
+    const snapId = foregroundSnapNotification?.snapId;
+
+    setForegroundSnapNotification(null);
+    refreshFeed?.();
+
+    router.push({
+      pathname: "/tabs/feed",
+      params: snapId ? { snapId: String(snapId) } : undefined,
+    });
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -241,7 +309,15 @@ export function AuthProvider({ children }) {
         refreshFeed,
       }}
     >
-      {children}
+      <>
+        {children}
+        <NewSnapBanner
+          visible={Boolean(foregroundSnapNotification)}
+          notification={foregroundSnapNotification}
+          onClose={() => setForegroundSnapNotification(null)}
+          onPress={handleOpenForegroundSnap}
+        />
+      </>
     </AuthContext.Provider>
   );
 }

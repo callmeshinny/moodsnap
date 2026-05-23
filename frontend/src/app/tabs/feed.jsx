@@ -13,7 +13,7 @@ import {
   View,
 } from "react-native";
 import { Image } from "expo-image";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { deleteSnapApi, getFeedApi } from "../../api/snapApi";
 import CustomButton from "../../components/CustomButton";
 import MutedText from "../../components/MutedText";
@@ -261,6 +261,8 @@ function FeedEmptyState({ friendCount, onRetry, showRetry }) {
 
 export default function FeedScreen() {
   const { feedRefreshKey, friendCount, user, refreshFeed } = useContext(AuthContext);
+  const params = useLocalSearchParams();
+  const targetSnapId = typeof params.snapId === "string" ? params.snapId : null;
   const [snaps, setSnaps] = useState([]);
   const [nextCursor, setNextCursor] = useState(null);
   const [selectedSnap, setSelectedSnap] = useState(null);
@@ -351,6 +353,17 @@ export default function FeedScreen() {
   useEffect(() => {
     loadFeed();
   }, [loadFeed, feedRefreshKey]);
+\n  useEffect(() => {
+    if (!targetSnapId || selectedSnap) {
+      return;
+    }
+
+    const matchedSnap = snaps.find((snap) => snap.id === targetSnapId);
+
+    if (matchedSnap) {
+      setSelectedSnap(matchedSnap);
+    }
+  }, [targetSnapId, snaps, selectedSnap]);
 
   if (loading && snaps.length === 0) {
     return (
