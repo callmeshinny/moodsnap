@@ -47,3 +47,17 @@ export const uploadProfilePhotoApi = async (imageUri) => {
 
   return data;
 };
+
+
+export const searchUsersApi = async (query) => {
+  const response = await apiClient.get("/users/search", {
+    params: { q: query },
+  });
+
+  const data = response.data;
+
+  return {
+    ...data,
+    users: data.users || data.data?.users || [],
+  };
+};

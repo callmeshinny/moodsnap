@@ -116,3 +116,24 @@ export const deleteSnapApi = async (snapId) => {
 
   return data;
 };
+
+
+export const getSnapByIdApi = async (snapId) => {
+  const response = await apiClient.get(`/snaps/${snapId}`);
+  return response.data;
+};
+
+export const getFeedHomeApi = async ({ cursor, limit = 20 } = {}) => {
+  const response = await apiClient.get("/snaps/feed/home", {
+    params: { cursor, limit },
+  });
+
+  const data = response.data;
+
+  return {
+    ...data,
+    snaps: data.snaps || data.data?.snaps || [],
+    nextCursor: data.nextCursor || data.data?.nextCursor || null,
+    meta: data.data?.meta || {},
+  };
+};

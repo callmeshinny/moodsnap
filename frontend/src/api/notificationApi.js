@@ -21,3 +21,21 @@ export const unregisterPushTokenApi = async (expoPushToken) => {
 
   return response.data;
 };
+
+
+export const getNotificationPreferencesApi = async () => {
+  const response = await apiClient.get("/notifications/preferences");
+  return response.data;
+};
+
+export const updateNotificationPreferencesApi = async ({
+  newSnapEnabled,
+  remindersEnabled,
+}) => {
+  const response = await apiClient.patch("/notifications/preferences", {
+    newSnapEnabled,
+    remindersEnabled,
+  });
+
+  return response.data;
+};

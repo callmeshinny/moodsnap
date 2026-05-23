@@ -65,3 +65,18 @@ export const reportUserApi = async ({ reportedUserId, reason, details }) => {
   });
   return response.data;
 };
+
+
+export const getFriendsOverviewApi = async () => {
+  const response = await apiClient.get("/friends/overview");
+  const data = response.data;
+
+  return {
+    ...data,
+    pendingRequests: data.pendingRequests || data.data?.pendingRequests || [],
+    friends: data.friends || data.data?.friends || [],
+    friendCount: data.friendCount ?? data.data?.friendCount ?? 0,
+    pendingRequestCount:
+      data.pendingRequestCount ?? data.data?.pendingRequestCount ?? 0,
+  };
+};

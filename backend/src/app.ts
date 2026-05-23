@@ -1,11 +1,15 @@
 import express from "express";
+import appRoutes from "./routes/app.routes";
 import cors from "cors";
 import authRoutes from "./routes/auth.routes";
 import friendRoutes from "./routes/friend.routes";
+import friendsOverviewRoutes from "./routes/friendsOverview.routes";
 import moodRoutes from "./routes/mood.routes";
 import ratingRoutes from "./routes/rating.routes";
+import notificationPreferencesRoutes from "./routes/notificationPreferences.routes";
 import snapRoutes from "./routes/snap.routes";
 import userRoutes from "./routes/user.routes";
+import userSearchRoutes from "./routes/userSearch.routes";
 import notificationRoutes from "./routes/notification.routes";
 import jobRoutes from "./routes/job.routes";
 
@@ -13,6 +17,7 @@ const app = express();
 
 app.use(cors());
 app.use(express.json());
+app.use("/api/notifications/preferences", notificationPreferencesRoutes);
 app.use("/api/notifications", notificationRoutes);
 
 app.get("/", (_req, res) => {
@@ -99,12 +104,16 @@ app.get("/friend/:username", (req, res) => {
   `);
 });
 
+app.use("/api/app", appRoutes);
 app.use("/api/auth", authRoutes);
+app.use("/api/users/search", userSearchRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/snaps", snapRoutes);
+app.use("/api/friends/overview", friendsOverviewRoutes);
 app.use("/api/friends", friendRoutes);
 app.use("/api/moods", moodRoutes);
 app.use("/api/ratings", ratingRoutes);
+app.use("/api/notifications/preferences", notificationPreferencesRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/jobs", jobRoutes);
 
