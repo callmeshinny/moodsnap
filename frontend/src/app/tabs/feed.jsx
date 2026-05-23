@@ -3,7 +3,6 @@ import {
   ActivityIndicator,
   Dimensions,
   FlatList,
-  Image,
   Modal,
   RefreshControl,
   StyleSheet,
@@ -11,23 +10,26 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { Image } from "expo-image";
+import { router } from "expo-router";
 import { getFeedApi } from "../../api/snapApi";
+import CustomButton from "../../components/CustomButton";
+import MutedText from "../../components/MutedText";
 import { AuthContext } from "../../context/AuthContext";
 import { COLORS } from "../../constants/colors";
 import { getMoodMeta } from "../../utils/moods";
 import { formatUploadTime } from "../../utils/time";
 
 const { height } = Dimensions.get("window");
-const CARD_HEIGHT = Math.round(height * 0.33);
 
-function Avatar({ user }) {
+const Avatar = React.memo(function Avatar({ user }) {
   const ringColor = user?.profileColor || COLORS.primary;
   const initial = user?.username?.[0]?.toUpperCase() || "?";
 
   return (
     <View style={[styles.avatarRing, { borderColor: ringColor }]}>
       {user?.avatarUrl ? (
-        <Image source={{ uri: user.avatarUrl }} style={styles.avatar} />
+        <Image source={{ uri: user.avatarUrl }} style={styles.avatar} contentFit="cover" />
       ) : (
         <View style={styles.avatarFallback}>
           <Text style={styles.avatarInitial}>{initial}</Text>
@@ -35,9 +37,9 @@ function Avatar({ user }) {
       )}
     </View>
   );
-}
+});
 
-function FeedCard({ item, onOpen }) {
+const FeedCard = React.memo(function FeedCard({ item, onOpen }) {
   const mood = getMoodMeta(item.mood);
   const name = item.user?.username || "MoodSnap user";
 
@@ -46,8 +48,10 @@ function FeedCard({ item, onOpen }) {
       style={[styles.card, { aspectRatio: 5 / 3 }]}
       onPress={() => onOpen(item)}
       activeOpacity={0.9}
+      accessibilityRole="button"
+      accessibilityLabel={`Open snap from ${name}`}
     >
-      <Image source={{ uri: item.imageUrl }} style={styles.cardImage} />
+      <Image source={{ uri: item.imageUrl }} style={styles.cardImage} contentFit="cover" />
       <View style={styles.cardScrim} />
       <View style={styles.cardTopText}>
         <Text style={styles.cardTime}>{formatUploadTime(item.createdAt)}</Text>
@@ -75,10 +79,48 @@ function FeedCard({ item, onOpen }) {
       </View>
     </TouchableOpacity>
   );
+});
+
+function FeedEmptyState({ friendCount, onRetry, showRetry }) {
+  const hasNoFriends = friendCount === 0;
+
+  return (
+    <View style={styles.emptyCard}>
+      <Text style={styles.emptyEmoji}>{hasNoFriends ? "👥" : "🖼️"}</Text>
+      <Text style={styles.emptyTitle}>
+        {hasNoFriends ? "Add friends to fill your feed" : "No snaps yet"}
+      </Text>
+      <MutedText style={styles.emptyText}>
+        {hasNoFriends
+          ? "Invite people from Profile. Once they accept, their mood snaps appear here."
+          : "Post your first snap on Camera, or wait for friends to share theirs."}
+      </MutedText>
+      <View style={styles.emptyActions}>
+        {hasNoFriends ? (
+          <CustomButton
+            title="Invite friends"
+            onPress={() => router.push("/tabs/profile")}
+            accessibilityLabel="Go to profile to invite friends"
+          />
+        ) : null}
+        <CustomButton
+          title="Post a snap"
+          onPress={() => router.push("/tabs/camera")}
+          variant={hasNoFriends ? "secondary" : "primary"}
+          accessibilityLabel="Go to camera to post a snap"
+        />
+      </View>
+      {showRetry ? (
+        <TouchableOpacity onPress={onRetry} style={styles.retryLink}>
+          <Text style={styles.retryText}>Tap to retry</Text>
+        </TouchableOpacity>
+      ) : null}
+    </View>
+  );
 }
 
 export default function FeedScreen() {
-  const { feedRefreshKey } = useContext(AuthContext);
+  const { feedRefreshKey, friendCount } = useContext(AuthContext);
   const [snaps, setSnaps] = useState([]);
   const [nextCursor, setNextCursor] = useState(null);
   const [selectedSnap, setSelectedSnap] = useState(null);
@@ -86,6 +128,7 @@ export default function FeedScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
+  const [loadMoreError, setLoadMoreError] = useState("");
 
   const loadFeed = useCallback(async ({ reset = false } = {}) => {
     try {
@@ -99,6 +142,7 @@ export default function FeedScreen() {
       setSnaps(result.snaps || []);
       setNextCursor(result.nextCursor || null);
       setError("");
+      setLoadMoreError("");
     } catch (loadError) {
       setSnaps([]);
       setNextCursor(null);
@@ -116,15 +160,23 @@ export default function FeedScreen() {
 
     try {
       setLoadingMore(true);
+      setLoadMoreError("");
       const result = await getFeedApi({ cursor: nextCursor, limit: 20 });
       setSnaps((current) => [...current, ...(result.snaps || [])]);
       setNextCursor(result.nextCursor || null);
     } catch (loadError) {
-      setError("");
+      setLoadMoreError(
+        loadError.message || "Could not load more snaps. Pull down to refresh."
+      );
     } finally {
       setLoadingMore(false);
     }
   };
+
+  const renderItem = useCallback(
+    ({ item }) => <FeedCard item={item} onOpen={setSelectedSnap} />,
+    []
+  );
 
   useEffect(() => {
     loadFeed();
@@ -148,19 +200,21 @@ export default function FeedScreen() {
           <View style={styles.header}>
             <Text style={styles.logo}>MoodSnap</Text>
             {!!error && <Text style={styles.errorText}>{error}</Text>}
+            {!!loadMoreError && (
+              <TouchableOpacity onPress={loadMore}>
+                <Text style={styles.loadMoreError}>{loadMoreError}</Text>
+              </TouchableOpacity>
+            )}
           </View>
         }
         ListEmptyComponent={
-          <View style={styles.emptyCard}>
-            <Text style={styles.emptyTitle}>No snaps yet</Text>
-            <Text style={styles.emptyText}>
-              Upload your first mood snap or add friends to fill your feed.
-            </Text>
-          </View>
+          <FeedEmptyState
+            friendCount={friendCount}
+            onRetry={() => loadFeed({ reset: true })}
+            showRetry={Boolean(error)}
+          />
         }
-        renderItem={({ item }) => (
-          <FeedCard item={item} onOpen={setSelectedSnap} />
-        )}
+        renderItem={renderItem}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -194,8 +248,10 @@ export default function FeedScreen() {
               style={styles.modalCloseButton}
               onPress={() => setSelectedSnap(null)}
               activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel="Close"
             >
-              <Text style={styles.modalCloseText}>×</Text>
+              <Text style={styles.modalCloseText}>Close</Text>
             </TouchableOpacity>
 
             {selectedSnap && (
@@ -203,7 +259,7 @@ export default function FeedScreen() {
                 <Image
                   source={{ uri: selectedSnap.imageUrl }}
                   style={styles.modalImage}
-                  resizeMode="contain"
+                  contentFit="contain"
                 />
                 <Text style={styles.modalTitle}>
                   {selectedSnap.user?.username || "MoodSnap user"}
@@ -248,21 +304,16 @@ const styles = StyleSheet.create({
     fontSize: 40,
     fontWeight: "900",
   },
-  title: {
-    color: "#fff",
-    fontSize: 27,
-    fontWeight: "900",
-    marginTop: 16,
-  },
-  subtitle: {
-    color: "#888",
-    fontSize: 15,
-    marginTop: 6,
-  },
   errorText: {
     color: COLORS.danger,
     marginTop: 12,
     fontWeight: "800",
+  },
+  loadMoreError: {
+    color: COLORS.secondary,
+    marginTop: 10,
+    fontWeight: "800",
+    fontSize: 13,
   },
   card: {
     width: "100%",
@@ -275,7 +326,6 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     width: "100%",
     height: "100%",
-    resizeMode: "cover",
   },
   cardTopText: {
     position: "absolute",
@@ -374,23 +424,38 @@ const styles = StyleSheet.create({
     fontSize: 20,
   },
   emptyCard: {
-    minHeight: 220,
+    minHeight: 280,
     borderRadius: 28,
     backgroundColor: "#151515",
     justifyContent: "center",
     alignItems: "center",
     padding: 24,
   },
+  emptyEmoji: {
+    fontSize: 42,
+    marginBottom: 12,
+  },
   emptyTitle: {
     color: "#fff",
     fontSize: 22,
     fontWeight: "900",
+    textAlign: "center",
   },
   emptyText: {
-    color: "#888",
     textAlign: "center",
     marginTop: 8,
-    lineHeight: 20,
+  },
+  emptyActions: {
+    width: "100%",
+    marginTop: 20,
+    gap: 10,
+  },
+  retryLink: {
+    marginTop: 16,
+  },
+  retryText: {
+    color: COLORS.secondary,
+    fontWeight: "800",
   },
   footerLoader: {
     marginVertical: 20,
@@ -414,18 +479,15 @@ const styles = StyleSheet.create({
     top: 22,
     right: 22,
     zIndex: 10,
-    width: 38,
-    height: 38,
     borderRadius: 19,
     backgroundColor: "rgba(0,0,0,0.62)",
-    justifyContent: "center",
-    alignItems: "center",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
   },
   modalCloseText: {
     color: "#fff",
-    fontSize: 28,
+    fontSize: 14,
     fontWeight: "900",
-    marginTop: -3,
   },
   modalImage: {
     width: "100%",

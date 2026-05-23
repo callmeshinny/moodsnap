@@ -1,14 +1,10 @@
 import React, { useContext, useEffect, useState } from "react";
 import {
   Alert,
-  Image,
   Linking,
-  Modal,
   ScrollView,
   Share,
-  StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -23,8 +19,26 @@ import {
   sendFriendRequestApi,
 } from "../../api/friendApi";
 import { deleteMeApi } from "../../api/userApi";
-import { AuthContext } from "../../context/AuthContext";
+import {
+  ColorPickerModal,
+  EditNameModal,
+  PrivacyModal,
+  RatingModal,
+  TermsModal,
+} from "../../components/profile/AboutModals";
+import FriendRequestsSection from "../../components/profile/FriendRequestsSection";
+import FriendsModal from "../../components/profile/FriendsModal";
+import ProfileHeader from "../../components/profile/ProfileHeader";
+import { Section, SettingRow } from "../../components/profile/ProfileSections";
+import { profileStyles as styles } from "../../components/profile/profileStyles";
+import {
+  APP_STORE_URL,
+  buildDisplayFriendLink,
+  buildShareFriendLink,
+} from "../../constants/app";
 import { COLORS } from "../../constants/colors";
+import { AuthContext } from "../../context/AuthContext";
+import { extractFriendIdentifier } from "../../utils/friendLink";
 
 const aboutItems = [
   { icon: "⭐", label: "Rate MoodSnap" },
@@ -33,37 +47,12 @@ const aboutItems = [
   { icon: "🔒", label: "Privacy Policy" },
 ];
 
-function SettingRow({ icon, label, danger, onPress }) {
-  return (
-    <TouchableOpacity style={styles.row} onPress={onPress} activeOpacity={0.75}>
-      <View style={styles.rowLeft}>
-        <Text style={[styles.rowIcon, danger && styles.dangerText]}>{icon}</Text>
-        <Text style={[styles.rowLabel, danger && styles.dangerText]}>
-          {label}
-        </Text>
-      </View>
-      <Text style={styles.chevron}>›</Text>
-    </TouchableOpacity>
-  );
-}
-
-function Section({ title, children }) {
-  return (
-    <View style={styles.sectionWrap}>
-      <Text style={styles.sectionTitle}>{title}</Text>
-      <View style={styles.sectionCard}>{children}</View>
-    </View>
-  );
-}
-
 export default function ProfileScreen() {
   const {
     user,
     logout,
     friendCount,
-    friendLink,
     refreshAppData,
-    refreshFriendLink,
     updateUser,
     updateProfilePhoto,
   } = useContext(AuthContext);
@@ -75,7 +64,6 @@ export default function ProfileScreen() {
   const [ratingModalVisible, setRatingModalVisible] = useState(false);
   const [termsVisible, setTermsVisible] = useState(false);
   const [privacyVisible, setPrivacyVisible] = useState(false);
-  const [selectedRating, setSelectedRating] = useState(0);
   const [friendRequests, setFriendRequests] = useState([]);
   const [friendsVisible, setFriendsVisible] = useState(false);
   const [friends, setFriends] = useState([]);
@@ -92,6 +80,13 @@ export default function ProfileScreen() {
     setDraftName(user?.username || "");
   }, [user?.username]);
 
+  const displayFriendLink = buildDisplayFriendLink(user?.username) || "Loading share URL...";
+  const shareFriendLink = buildShareFriendLink(user?.username);
+  const profileColor = user?.profileColor || COLORS.primary;
+
+  const getInviteMessage = () =>
+    `Add me on MoodSnap: ${displayFriendLink}\n${shareFriendLink}`;
+
   const handleSignOut = async () => {
     Alert.alert("Sign out", "Are you sure you want to sign out?", [
       { text: "Cancel", style: "cancel" },
@@ -106,58 +101,41 @@ export default function ProfileScreen() {
     ]);
   };
 
-  const getInviteMessage = () =>
-    `Add me on MoodSnap: ${displayFriendLink}\n${realFriendLink}`;
-
-  const getFriendLink = async () => {
-    if (!realFriendLink) {
-      Alert.alert("Friend link unavailable", "Please try again in a moment.");
-      return null;
-    }
-
-    return realFriendLink;
-  };
-
-
   const handleOpenFriendLink = async () => {
-    if (!realFriendLink) {
+    if (!shareFriendLink) {
       Alert.alert("Friend link unavailable", "Please try again in a moment.");
       return;
     }
 
     try {
-      await Linking.openURL(realFriendLink);
+      await Linking.openURL(shareFriendLink);
     } catch {
-      Alert.alert("Could not open link", realFriendLink);
+      Alert.alert("Could not open link", shareFriendLink);
     }
   };
 
   const handleCopyFriendLink = async () => {
-    const link = displayFriendLink;
-
-    if (!link) {
+    if (!displayFriendLink) {
       return;
     }
 
     try {
       await Clipboard.setStringAsync(getInviteMessage());
-      Alert.alert("Copied", "Your MoodSnap invite URL is ready to paste.");
+      Alert.alert("Copied", "Your MoodSnap invite is ready to paste.");
     } catch {
       Alert.alert("Copy failed", "Please try again.");
     }
   };
 
   const handleShareFriendLink = async () => {
-    const link = displayFriendLink;
-
-    if (!link) {
+    if (!displayFriendLink) {
       return;
     }
 
     try {
       await Share.share({
         message: getInviteMessage(),
-        url: link,
+        url: shareFriendLink || displayFriendLink,
         title: "Add me on MoodSnap",
       });
     } catch {
@@ -280,29 +258,21 @@ export default function ProfileScreen() {
     }
   };
 
-
-  const extractFriendIdentifier = (value) => {
-    const raw = String(value || "").trim();
-
-    if (!raw) {
-      return "";
+  const handleOpenFriends = async () => {
+    try {
+      setFriendsVisible(true);
+      setLoadingFriends(true);
+      const result = await getFriendsApi();
+      setFriends(result.friends || []);
+    } catch (error) {
+      setFriends([]);
+      Alert.alert(
+        "Could not load friends",
+        error.response?.data?.message || error.message || "Please try again."
+      );
+    } finally {
+      setLoadingFriends(false);
     }
-
-    const withoutQuery = raw.split("?")[0].split("#")[0];
-    const cleaned = withoutQuery.replace(/\/$/, "");
-    const parts = cleaned.split("/").filter(Boolean);
-    const lastPart = parts[parts.length - 1];
-
-    if (
-      cleaned.includes("moodsnap.cam/") ||
-      cleaned.includes("moodsnap-92ps.onrender.com/friend/") ||
-      cleaned.includes("moodsnap://friend/") ||
-      cleaned.includes("frontend://friend/")
-    ) {
-      return decodeURIComponent(lastPart || "").trim();
-    }
-
-    return raw.replace(/^@/, "").trim();
   };
 
   const handleSubmitFriendLink = async () => {
@@ -321,9 +291,7 @@ export default function ProfileScreen() {
         loadFriendRequests(),
         handleOpenFriends(),
       ]);
-
       setFriendLinkInput("");
-
       Alert.alert(
         "Friend request sent",
         `${receiverId} will see your request in their profile.`
@@ -340,61 +308,25 @@ export default function ProfileScreen() {
     }
   };
 
-  const handleOpenFriends = async () => {
-    try {
-      setFriendsVisible(true);
-      setLoadingFriends(true);
-
-      const result = await getFriendsApi();
-      setFriends(result.friends || []);
-    } catch (error) {
-      setFriends([]);
-      Alert.alert(
-        "Could not load friends",
-        error.response?.data?.message || error.message || "Please try again."
-      );
-    } finally {
-      setLoadingFriends(false);
-    }
-  };
-
-  const handleComingSoon = (label) => {
-    Alert.alert(label, "This setting will be connected later.");
-  };
-
-  const handleRateMoodSnap = (rating) => {
-    setSelectedRating(rating);
+  const handleRateMoodSnap = async (rating) => {
     setRatingModalVisible(false);
-    Alert.alert("Thanks for rating", `You rated MoodSnap ${rating}/5 stars.`);
-  };
 
-  const displayName = user?.username || "MoodSnap user";
-  const displayFriendLink = user?.username
-    ? `moodsnap.cam/${encodeURIComponent(user.username)}`
-    : "Loading share URL...";
-  const realFriendLink = user?.username
-    ? `https://moodsnap-92ps.onrender.com/friend/${encodeURIComponent(user.username)}`
-    : "";
-  const profileColor = user?.profileColor || COLORS.primary;
-
-  const colorOptions = [
-    "#F65078",
-    "#FF8A00",
-    "#FFD166",
-    "#06D6A0",
-    "#118AB2",
-    "#7B61FF",
-    "#FF4FD8",
-    "#FFFFFF",
-  ];
-
-
-  const withAlpha = (hex, alpha = "22") => {
-    if (typeof hex !== "string" || !hex.startsWith("#") || hex.length !== 7) {
-      return "rgba(246,80,120,0.14)";
+    if (APP_STORE_URL) {
+      Alert.alert(
+        "Thanks for rating",
+        `You rated MoodSnap ${rating}/5. Would you like to leave a review?`,
+        [
+          { text: "Not now", style: "cancel" },
+          {
+            text: "Open store",
+            onPress: () => Linking.openURL(APP_STORE_URL),
+          },
+        ]
+      );
+      return;
     }
 
-    return `${hex}${alpha}`;
+    Alert.alert("Thanks for rating", `You rated MoodSnap ${rating}/5 stars.`);
   };
 
   const handleChooseProfileColor = async (color) => {
@@ -414,71 +346,20 @@ export default function ProfileScreen() {
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.handle} />
 
-      <View style={styles.profileHeader}>
-        <TouchableOpacity
-          style={[styles.avatarOuter, { borderColor: profileColor }]}
-          onPress={() => setColorModalVisible(true)}
-          activeOpacity={0.82}
-        >
-          <View style={styles.avatarInner}>
-            {user?.avatarUrl ? (
-              <Image source={{ uri: user.avatarUrl }} style={styles.avatarImage} />
-            ) : (
-              <Text style={styles.avatarInitial}>
-                {displayName[0]?.toUpperCase() || "M"}
-              </Text>
-            )}
-            {uploadingPhoto && (
-              <View style={styles.avatarOverlay}>
-                <Text style={styles.avatarOverlayText}>Uploading</Text>
-              </View>
-            )}
-          </View>
-        </TouchableOpacity>
-
-        <Text style={styles.name}>{displayName}</Text>
-        <TouchableOpacity onPress={handleOpenFriendLink} activeOpacity={0.75}>
-          <Text
-            style={[
-              styles.link,
-              {
-                color: profileColor,
-                borderColor: profileColor,
-                backgroundColor: withAlpha(profileColor, "22"),
-              },
-            ]}
-          >
-            {displayFriendLink}
-          </Text>
-        </TouchableOpacity>
-
-        <View style={styles.quickRow}>
-          <TouchableOpacity
-            style={styles.quickButton}
-            onPress={handleOpenFriends}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.quickIcon}>👥</Text>
-            <Text style={styles.quickText}>{friendCount || 0} friends</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.quickButton}
-            onPress={handleShareFriendLink}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.quickIcon}>📤</Text>
-            <Text style={styles.quickText}>Share</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+      <ProfileHeader
+        user={user}
+        friendCount={friendCount}
+        displayFriendLink={displayFriendLink}
+        profileColor={profileColor}
+        uploadingPhoto={uploadingPhoto}
+        onOpenFriendLink={handleOpenFriendLink}
+        onOpenFriends={handleOpenFriends}
+        onShareFriendLink={handleShareFriendLink}
+        onOpenColorPicker={() => setColorModalVisible(true)}
+      />
 
       <Section title="General">
-        <SettingRow
-          icon="Aa"
-          label="Edit name"
-          onPress={() => setIsEditingName(true)}
-        />
+        <SettingRow icon="Aa" label="Edit name" onPress={() => setIsEditingName(true)} />
         <SettingRow
           icon="👤"
           label="Edit profile photo"
@@ -490,6 +371,11 @@ export default function ProfileScreen() {
           onPress={() => setColorModalVisible(true)}
         />
         <SettingRow
+          icon="📋"
+          label="Copy invite link"
+          onPress={handleCopyFriendLink}
+        />
+        <SettingRow
           icon="✉️"
           label="Email address"
           onPress={() =>
@@ -498,34 +384,11 @@ export default function ProfileScreen() {
         />
       </Section>
 
-      {friendRequests.length > 0 && (
-        <Section title="Friend requests">
-          {friendRequests.map((request) => (
-            <View key={request.id} style={styles.requestRow}>
-              <View>
-                <Text style={styles.requestName}>
-                  {request.sender?.username || "MoodSnap user"}
-                </Text>
-                <Text style={styles.requestMeta}>wants to add you</Text>
-              </View>
-              <View style={styles.requestActions}>
-                <TouchableOpacity
-                  style={styles.rejectButton}
-                  onPress={() => handleRejectRequest(request.id)}
-                >
-                  <Text style={styles.rejectText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.acceptButton}
-                  onPress={() => handleAcceptRequest(request.id)}
-                >
-                  <Text style={styles.acceptText}>Accept</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          ))}
-        </Section>
-      )}
+      <FriendRequestsSection
+        friendRequests={friendRequests}
+        onAccept={handleAcceptRequest}
+        onReject={handleRejectRequest}
+      />
 
       <Section title="About">
         {aboutItems.map((item) => (
@@ -538,23 +401,17 @@ export default function ProfileScreen() {
                 setRatingModalVisible(true);
                 return;
               }
-
               if (item.label === "Share MoodSnap") {
                 handleShareFriendLink();
                 return;
               }
-
               if (item.label === "Terms of Service") {
                 setTermsVisible(true);
                 return;
               }
-
               if (item.label === "Privacy Policy") {
                 setPrivacyVisible(true);
-                return;
               }
-
-              handleComingSoon(item.label);
             }}
           />
         ))}
@@ -572,732 +429,45 @@ export default function ProfileScreen() {
 
       <Text style={styles.footer}>Mood data stays private by default.</Text>
 
-      <Modal
+      <ColorPickerModal
         visible={colorModalVisible}
-        animationType="fade"
-        transparent
-        onRequestClose={() => setColorModalVisible(false)}
-      >
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Profile ring colour</Text>
-            <View style={styles.colorGrid}>
-              {colorOptions.map((color) => (
-                <TouchableOpacity
-                  key={color}
-                  style={[
-                    styles.colorCircle,
-                    { backgroundColor: color },
-                    profileColor === color && styles.colorCircleSelected,
-                  ]}
-                  onPress={() => handleChooseProfileColor(color)}
-                  activeOpacity={0.78}
-                />
-              ))}
-            </View>
-            <TouchableOpacity
-              style={styles.fullCancelButton}
-              onPress={() => setColorModalVisible(false)}
-            >
-              <Text style={styles.cancelText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+        onClose={() => setColorModalVisible(false)}
+        profileColor={profileColor}
+        onChooseColor={handleChooseProfileColor}
+      />
 
-      <Modal
+      <FriendsModal
         visible={friendsVisible}
-        animationType="fade"
-        transparent
-        onRequestClose={() => setFriendsVisible(false)}
-      >
-        <View style={styles.modalBackdrop}>
-          <View style={styles.friendsModalCard}>
-            <View style={styles.friendsModalHeader}>
-              <Text style={styles.modalTitle}>Friends</Text>
-              <TouchableOpacity
-                style={styles.closeButton}
-                onPress={() => setFriendsVisible(false)}
-                activeOpacity={0.75}
-              >
-                <Text style={styles.closeButtonText}>×</Text>
-              </TouchableOpacity>
-            </View>
+        onClose={() => setFriendsVisible(false)}
+        friends={friends}
+        loadingFriends={loadingFriends}
+        friendLinkInput={friendLinkInput}
+        onChangeFriendLinkInput={setFriendLinkInput}
+        onSubmitFriendLink={handleSubmitFriendLink}
+        sendingFriendRequest={sendingFriendRequest}
+      />
 
-            <View style={styles.addFriendBox}>
-              <TextInput
-                style={styles.addFriendInput}
-                value={friendLinkInput}
-                onChangeText={setFriendLinkInput}
-                placeholder="Paste link or username"
-                placeholderTextColor="#777"
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
-              <TouchableOpacity
-                style={[
-                  styles.addFriendButton,
-                  sendingFriendRequest && styles.disabledButton,
-                ]}
-                onPress={handleSubmitFriendLink}
-                disabled={sendingFriendRequest}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.addFriendButtonText}>
-                  {sendingFriendRequest ? "..." : "Send"}
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            {loadingFriends ? (
-              <Text style={styles.friendsEmptyText}>Loading friends...</Text>
-            ) : friends.length === 0 ? (
-              <Text style={styles.friendsEmptyText}>
-                No accepted friends yet.
-              </Text>
-            ) : (
-              <ScrollView style={styles.friendsList}>
-                {friends.map((friend) => (
-                  <View key={friend.id} style={styles.friendRow}>
-                    <View style={styles.friendAvatar}>
-                      {friend.avatarUrl ? (
-                        <Image
-                          source={{ uri: friend.avatarUrl }}
-                          style={styles.friendAvatarImage}
-                        />
-                      ) : (
-                        <Text style={styles.friendAvatarInitial}>
-                          {friend.username?.[0]?.toUpperCase() || "?"}
-                        </Text>
-                      )}
-                    </View>
-
-                    <View style={styles.friendInfo}>
-                      <Text style={styles.friendName}>
-                        {friend.username || "MoodSnap user"}
-                      </Text>
-                      <Text style={styles.friendMeta}>Accepted friend</Text>
-                    </View>
-                  </View>
-                ))}
-              </ScrollView>
-            )}
-          </View>
-        </View>
-      </Modal>
-
-      <Modal
+      <EditNameModal
         visible={isEditingName}
-        animationType="fade"
-        transparent
-        onRequestClose={() => setIsEditingName(false)}
-      >
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Edit name</Text>
-            <TextInput
-              style={styles.nameInput}
-              value={draftName}
-              onChangeText={setDraftName}
-              placeholder="Display name"
-              placeholderTextColor="#777"
-            />
-            <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={styles.cancelButton}
-                onPress={() => setIsEditingName(false)}
-              >
-                <Text style={styles.cancelText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.saveButton} onPress={handleSaveName}>
-                <Text style={styles.saveText}>
-                  {savingName ? "Saving..." : "Save"}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+        onClose={() => setIsEditingName(false)}
+        draftName={draftName}
+        onChangeDraftName={setDraftName}
+        onSave={handleSaveName}
+        savingName={savingName}
+      />
 
-      <Modal
+      <RatingModal
         visible={ratingModalVisible}
-        animationType="fade"
-        transparent
-        onRequestClose={() => setRatingModalVisible(false)}
-      >
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Rate MoodSnap</Text>
-            <Text style={styles.modalBody}>
-              How does MoodSnap feel today?
-            </Text>
-            <View style={styles.starRow}>
-              {[1, 2, 3, 4, 5].map((rating) => (
-                <TouchableOpacity
-                  key={rating}
-                  style={styles.starButton}
-                  onPress={() => handleRateMoodSnap(rating)}
-                  activeOpacity={0.72}
-                >
-                  <Text
-                    style={[
-                      styles.starText,
-                      rating <= selectedRating && styles.starTextSelected,
-                    ]}
-                  >
-                    ★
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-            <TouchableOpacity
-              style={styles.fullCancelButton}
-              onPress={() => setRatingModalVisible(false)}
-            >
-              <Text style={styles.cancelText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+        onClose={() => setRatingModalVisible(false)}
+        onRate={handleRateMoodSnap}
+      />
 
-      <Modal
-        visible={termsVisible}
-        animationType="slide"
-        transparent
-        onRequestClose={() => setTermsVisible(false)}
-      >
-        <View style={styles.modalBackdrop}>
-          <View style={styles.termsCard}>
-            <Text style={styles.modalTitle}>Terms of Service</Text>
-            <ScrollView style={styles.termsScroll}>
-              <Text style={styles.termsText}>
-                Welcome to MoodSnap. MoodSnap is for sharing real mood moments
-                with people you choose.
-              </Text>
-              <Text style={styles.termsText}>
-                Be kind. Post only photos you have the right to share. Do not
-                harass, impersonate, spam, scrape, or use MoodSnap for anything
-                illegal or unsafe.
-              </Text>
-              <Text style={styles.termsText}>
-                You own your photos, profile, and mood posts. You give MoodSnap
-                permission to host, process, and show that content so the app can
-                work for you and your friends.
-              </Text>
-              <Text style={styles.termsText}>
-                We may remove content or accounts that break these terms, hurt
-                other people, or put the service at risk. MoodSnap is provided
-                as is, and some features may change as the app grows.
-              </Text>
-              <Text style={styles.termsText}>
-                By using MoodSnap, you agree to keep the space honest, private,
-                and fun for the people you add.
-              </Text>
-            </ScrollView>
-            <TouchableOpacity
-              style={styles.doneButton}
-              onPress={() => setTermsVisible(false)}
-            >
-              <Text style={styles.saveText}>Done</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+      <TermsModal visible={termsVisible} onClose={() => setTermsVisible(false)} />
 
-      <Modal
+      <PrivacyModal
         visible={privacyVisible}
-        animationType="slide"
-        transparent
-        onRequestClose={() => setPrivacyVisible(false)}
-      >
-        <View style={styles.modalBackdrop}>
-          <View style={styles.termsCard}>
-            <Text style={styles.modalTitle}>Privacy Policy</Text>
-            <ScrollView style={styles.termsScroll}>
-              <Text style={styles.termsText}>
-                MoodSnap is built for sharing small, real moments with people you choose.
-                Your profile, mood snaps, friend list, and mood calendar are used to make
-                the app work and to show your content to accepted friends.
-              </Text>
-              <Text style={styles.termsText}>
-                Your snaps are private by default. People who are not your accepted friends
-                cannot see your feed photos through the app. You can add friends through
-                your MoodSnap invite link, and you control who becomes your friend.
-              </Text>
-              <Text style={styles.termsText}>
-                We store account details such as your email, username, profile photo,
-                friend relationships, mood entries, and uploaded image links. Photos are
-                hosted securely through Cloudinary and app data is stored through our
-                backend database services.
-              </Text>
-              <Text style={styles.termsText}>
-                We use your information to sign you in, verify your account, upload and
-                display snaps, calculate streaks, show your calendar, manage friends, and
-                keep the app safe from spam or misuse.
-              </Text>
-              <Text style={styles.termsText}>
-                MoodSnap does not sell your personal information. You should only share
-                photos that you are comfortable showing to your accepted friends.
-              </Text>
-              <Text style={styles.termsText}>
-                You can update your profile name and photo in the app. You can also delete
-                your account from Profile settings, which removes your account data and
-                connected MoodSnap content from the app database where supported.
-              </Text>
-            </ScrollView>
-            <TouchableOpacity
-              style={styles.doneButton}
-              onPress={() => setPrivacyVisible(false)}
-            >
-              <Text style={styles.saveText}>Done</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
+        onClose={() => setPrivacyVisible(false)}
+      />
     </ScrollView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#000",
-  },
-  content: {
-    paddingHorizontal: 18,
-    paddingTop: 62,
-    paddingBottom: 120,
-  },
-  handle: {
-    alignSelf: "center",
-    width: 44,
-    height: 6,
-    borderRadius: 99,
-    backgroundColor: "#555",
-    marginBottom: 30,
-  },
-  profileHeader: {
-    alignItems: "center",
-    marginBottom: 30,
-  },
-  avatarOuter: {
-    width: 126,
-    height: 126,
-    borderRadius: 63,
-    borderWidth: 6,
-    borderColor: COLORS.primary,
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 18,
-  },
-  avatarInner: {
-    width: 108,
-    height: 108,
-    borderRadius: 54,
-    backgroundColor: "#2b2b2b",
-    justifyContent: "center",
-    alignItems: "center",
-    overflow: "hidden",
-  },
-  avatarImage: {
-    width: "100%",
-    height: "100%",
-  },
-  avatarOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.62)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  avatarOverlayText: {
-    color: "#fff",
-    fontSize: 12,
-    fontWeight: "900",
-  },
-  avatarInitial: {
-    color: "#fff",
-    fontSize: 44,
-    fontWeight: "900",
-  },
-  name: {
-    color: "#fff",
-    fontSize: 28,
-    fontWeight: "900",
-  },
-  link: {
-    color: COLORS.primary,
-    fontSize: 14,
-    fontWeight: "900",
-    marginTop: 8,
-    textAlign: "center",
-    backgroundColor: "rgba(246,80,120,0.12)",
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: 999,
-    borderWidth: 1.5,
-    borderColor: COLORS.primary,
-    overflow: "hidden",
-  },
-  quickRow: {
-    flexDirection: "row",
-    gap: 14,
-    marginTop: 24,
-  },
-  quickButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    backgroundColor: "#3a3a3a",
-    paddingVertical: 14,
-    paddingHorizontal: 18,
-    borderRadius: 28,
-    minWidth: 132,
-    justifyContent: "center",
-  },
-  quickIcon: {
-    fontSize: 14,
-  },
-  quickText: {
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "900",
-  },
-  sectionWrap: {
-    marginTop: 22,
-  },
-  sectionTitle: {
-    color: "#bdbdbd",
-    fontSize: 14,
-    fontWeight: "900",
-    marginBottom: 12,
-    marginLeft: 8,
-  },
-  sectionCard: {
-    backgroundColor: "#3a3a3a",
-    borderRadius: 24,
-    overflow: "hidden",
-    paddingVertical: 8,
-  },
-  row: {
-    minHeight: 58,
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  rowLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 16,
-  },
-  rowIcon: {
-    width: 34,
-    textAlign: "center",
-    color: "#fff",
-    fontSize: 21,
-    fontWeight: "900",
-  },
-  rowLabel: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "900",
-  },
-  requestRow: {
-    minHeight: 72,
-    paddingHorizontal: 18,
-    paddingVertical: 12,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: 12,
-  },
-  requestName: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "900",
-  },
-  requestMeta: {
-    color: "#aaa",
-    fontSize: 12,
-    fontWeight: "800",
-    marginTop: 3,
-  },
-  requestActions: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  rejectButton: {
-    borderRadius: 14,
-    backgroundColor: "#292929",
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-  },
-  rejectText: {
-    color: "#fff",
-    fontWeight: "900",
-    fontSize: 12,
-  },
-  acceptButton: {
-    borderRadius: 14,
-    backgroundColor: COLORS.primary,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-  },
-  acceptText: {
-    color: "#fff",
-    fontWeight: "900",
-    fontSize: 12,
-  },
-  chevron: {
-    color: "#777",
-    fontSize: 34,
-    fontWeight: "500",
-    marginTop: -4,
-  },
-  dangerText: {
-    color: "#ff4d4d",
-  },
-  footer: {
-    color: "#7a7a7a",
-    textAlign: "center",
-    marginTop: 34,
-    fontSize: 13,
-    fontWeight: "800",
-  },
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.78)",
-    justifyContent: "center",
-    padding: 22,
-  },
-  modalCard: {
-    backgroundColor: "#151515",
-    borderRadius: 28,
-    padding: 20,
-  },
-  modalTitle: {
-    color: "#fff",
-    fontSize: 24,
-    fontWeight: "900",
-    marginBottom: 14,
-  },
-  modalBody: {
-    color: "#aaa",
-    fontSize: 15,
-    fontWeight: "800",
-    lineHeight: 21,
-  },
-  nameInput: {
-    backgroundColor: "#222",
-    borderRadius: 18,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "800",
-  },
-  modalActions: {
-    flexDirection: "row",
-    gap: 12,
-    marginTop: 18,
-  },
-  cancelButton: {
-    flex: 1,
-    borderRadius: 18,
-    paddingVertical: 14,
-    backgroundColor: "#292929",
-    alignItems: "center",
-  },
-  cancelText: {
-    color: "#fff",
-    fontWeight: "900",
-  },
-  fullCancelButton: {
-    borderRadius: 18,
-    paddingVertical: 14,
-    backgroundColor: "#292929",
-    alignItems: "center",
-    marginTop: 18,
-  },
-  saveButton: {
-    flex: 1,
-    borderRadius: 18,
-    paddingVertical: 14,
-    backgroundColor: COLORS.primary,
-    alignItems: "center",
-  },
-  saveText: {
-    color: "#fff",
-    fontWeight: "900",
-  },
-  doneButton: {
-    borderRadius: 18,
-    paddingVertical: 14,
-    backgroundColor: COLORS.primary,
-    alignItems: "center",
-  },
-  colorGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 14,
-    marginTop: 8,
-  },
-  colorCircle: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    borderWidth: 3,
-    borderColor: "transparent",
-  },
-  colorCircleSelected: {
-    borderColor: "#fff",
-    transform: [{ scale: 1.08 }],
-  },
-  starRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 18,
-  },
-  starButton: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#242424",
-  },
-  starText: {
-    color: "#777",
-    fontSize: 30,
-    fontWeight: "900",
-  },
-  starTextSelected: {
-    color: COLORS.primary,
-  },
-  termsCard: {
-    backgroundColor: "#151515",
-    borderRadius: 28,
-    padding: 20,
-    maxHeight: "82%",
-  },
-  termsScroll: {
-    marginBottom: 18,
-  },
-  termsText: {
-    color: "#d9d9d9",
-    fontSize: 15,
-    fontWeight: "700",
-    lineHeight: 22,
-    marginBottom: 14,
-  },
-  friendsModalCard: {
-    backgroundColor: "#151515",
-    borderRadius: 28,
-    padding: 20,
-    maxHeight: "78%",
-  },
-  friendsModalHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  closeButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "#292929",
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 14,
-  },
-  closeButtonText: {
-    color: "#fff",
-    fontSize: 26,
-    fontWeight: "900",
-    marginTop: -2,
-  },
-  friendsList: {
-    maxHeight: 430,
-  },
-  friendRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#252525",
-  },
-  friendAvatar: {
-    width: 54,
-    height: 54,
-    borderRadius: 27,
-    backgroundColor: "#2b2b2b",
-    borderWidth: 2,
-    borderColor: COLORS.primary,
-    justifyContent: "center",
-    alignItems: "center",
-    overflow: "hidden",
-  },
-  friendAvatarImage: {
-    width: "100%",
-    height: "100%",
-  },
-  friendAvatarInitial: {
-    color: "#fff",
-    fontSize: 22,
-    fontWeight: "900",
-  },
-  friendInfo: {
-    flex: 1,
-  },
-  friendName: {
-    color: "#fff",
-    fontSize: 17,
-    fontWeight: "900",
-  },
-  friendMeta: {
-    color: "#aaa",
-    fontSize: 12,
-    fontWeight: "800",
-    marginTop: 3,
-  },
-  friendsEmptyText: {
-    color: "#aaa",
-    fontSize: 15,
-    fontWeight: "800",
-    lineHeight: 22,
-    paddingVertical: 18,
-  },
-  addFriendBox: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    marginTop: 4,
-    marginBottom: 14,
-  },
-  addFriendInput: {
-    flex: 1,
-    backgroundColor: "#222",
-    borderRadius: 18,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "800",
-    borderWidth: 1,
-    borderColor: "#333",
-  },
-  addFriendButton: {
-    backgroundColor: COLORS.primary,
-    borderRadius: 18,
-    paddingHorizontal: 16,
-    paddingVertical: 13,
-  },
-  addFriendButtonText: {
-    color: "#fff",
-    fontWeight: "900",
-    fontSize: 13,
-  },
-});

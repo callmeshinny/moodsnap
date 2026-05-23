@@ -43,11 +43,12 @@ export const getStreak = async (
     const userId = requireUserId(req, res);
     if (!userId) return;
 
-    const streak = await getMoodStreak(userId);
+    const { streak, postedToday } = await getMoodStreak(userId);
 
     res.status(200).json({
       success: true,
       streak,
+      postedToday,
     });
   } catch (error) {
     const message =

@@ -58,13 +58,6 @@ export default function TabsLayout() {
           tabBarIcon: () => <TabIcon emoji="👤" />,
         }}
       />
-
-      <Tabs.Screen
-        name="messages"
-        options={{
-          href: null,
-        }}
-      />
     </Tabs>
   );
 }

@@ -41,7 +41,7 @@ export default function VerifyOtpScreen() {
 
       Alert.alert("Success", "Your email has been verified.");
 
-      router.replace("/tabs/camera");
+      router.replace("/");
     } catch (error) {
       Alert.alert(
         "Verify failed",

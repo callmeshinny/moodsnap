@@ -7,8 +7,11 @@ export default function CustomInput({
   value,
   onChangeText,
   secureTextEntry = false,
-  keyboardType = "default"
+  keyboardType = "default",
+  accessibilityLabel,
 }) {
+  const label = accessibilityLabel || placeholder;
+
   return (
     <TextInput
       style={styles.input}
@@ -19,6 +22,7 @@ export default function CustomInput({
       secureTextEntry={secureTextEntry}
       keyboardType={keyboardType}
       autoCapitalize="none"
+      accessibilityLabel={label}
     />
   );
 }

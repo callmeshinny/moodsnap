@@ -44,6 +44,9 @@ alter table public.moodsnap
 alter table public.users
   add column if not exists avatar_public_id text;
 
+alter table public.users
+  add column if not exists profile_color text default '#FF69B4';
+
 create table if not exists public.friendships (
   id uuid primary key default gen_random_uuid(),
   user_one_id text not null,

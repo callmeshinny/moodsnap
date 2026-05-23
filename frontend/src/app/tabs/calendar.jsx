@@ -15,6 +15,7 @@ import { AuthContext } from "../../context/AuthContext";
 import { COLORS } from "../../constants/colors";
 import { getMoodMeta } from "../../utils/moods";
 import { formatUploadTime } from "../../utils/time";
+import { toLocalDateKey } from "../../utils/date";
 
 const monthLabels = [
   "January",
@@ -35,7 +36,7 @@ const weekLabels = ["M", "T", "W", "T", "F", "S", "S"];
 
 const MODAL_IMAGE_WIDTH = 320;
 
-const dateKey = (date) => date.toISOString().slice(0, 10);
+const dateKey = (date) => toLocalDateKey(date);
 
 const buildMonths = (startedAt) => {
   const now = new Date();
@@ -130,7 +131,10 @@ export default function CalendarScreen() {
     const map = new Map();
 
     for (const entry of entries) {
-      map.set(entry.date, entry);
+      const key = entry.createdAt
+        ? toLocalDateKey(entry.createdAt)
+        : entry.date;
+      map.set(key, entry);
     }
 
     return map;
@@ -174,6 +178,11 @@ export default function CalendarScreen() {
             <Text style={styles.streakText}>🔥 {streak || 0} day streak</Text>
           </View>
         </View>
+
+        <Text style={styles.helperText}>
+          Streak counts consecutive days you posted any mood snap. Dots use your
+          device's local date.
+        </Text>
 
         {!!error && <Text style={styles.errorText}>{error}</Text>}
 
@@ -277,6 +286,13 @@ const styles = StyleSheet.create({
   streakText: {
     color: COLORS.primary,
     fontWeight: "900",
+  },
+  helperText: {
+    color: "#888",
+    fontSize: 13,
+    fontWeight: "700",
+    lineHeight: 19,
+    marginBottom: 18,
   },
   errorText: {
     color: COLORS.danger,

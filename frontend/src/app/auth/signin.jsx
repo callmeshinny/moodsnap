@@ -39,7 +39,7 @@ export default function SignInScreen() {
 
       await login(result.token, result.user);
 
-      router.replace("/tabs/camera");
+      router.replace("/");
     } catch (error) {
       Alert.alert(
         "Sign in failed",

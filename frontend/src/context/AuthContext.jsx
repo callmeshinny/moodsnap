@@ -1,6 +1,9 @@
 import React, { createContext, useEffect, useState } from "react";
+import { Alert } from "react-native";
+import { router } from "expo-router";
 import { getFriendCountApi, getFriendLinkApi } from "../api/friendApi";
 import { getMoodStreakApi } from "../api/moodApi";
+import { setUnauthorizedHandler } from "../api/sessionHandler";
 import { getMeApi, updateMeApi, uploadProfilePhotoApi } from "../api/userApi";
 import {
   getToken,
@@ -8,7 +11,7 @@ import {
   removeToken,
   removeUser,
   saveToken,
-  saveUser
+  saveUser,
 } from "../storage/tokenStorage";
 
 export const AuthContext = createContext(null);
@@ -20,22 +23,64 @@ export function AuthProvider({ children }) {
   const [friendCount, setFriendCount] = useState(0);
   const [friendLink, setFriendLink] = useState("");
   const [streak, setStreak] = useState(0);
+  const [postedToday, setPostedToday] = useState(false);
   const [feedRefreshKey, setFeedRefreshKey] = useState(0);
 
+  const clearSession = async () => {
+    await removeToken();
+    await removeUser();
+    setToken(null);
+    setUser(null);
+    setFriendCount(0);
+    setFriendLink("");
+    setStreak(0);
+    setPostedToday(false);
+  };
+
   const loadSession = async () => {
-    const storedToken = await getToken();
-    const storedUser = await getUser();
+    try {
+      const storedToken = await getToken();
 
-    if (storedToken && storedUser) {
+      if (!storedToken) {
+        setIsLoading(false);
+        return;
+      }
+
       setToken(storedToken);
-      setUser(storedUser);
-    }
 
-    setIsLoading(false);
+      const result = await getMeApi();
+
+      if (result.user) {
+        await saveUser(result.user);
+        setUser(result.user);
+        return;
+      }
+
+      await clearSession();
+    } catch {
+      const storedUser = await getUser();
+
+      if (storedUser) {
+        setUser(storedUser);
+        return;
+      }
+
+      await clearSession();
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   useEffect(() => {
     loadSession();
+  }, []);
+
+  useEffect(() => {
+    setUnauthorizedHandler(async (message) => {
+      await clearSession();
+      router.replace("/auth/signin");
+      Alert.alert("Session expired", message);
+    });
   }, []);
 
   const refreshProfile = async () => {
@@ -90,6 +135,7 @@ export function AuthProvider({ children }) {
   const refreshStreak = async () => {
     const result = await getMoodStreakApi();
     setStreak(result.streak || 0);
+    setPostedToday(Boolean(result.postedToday));
     return result.streak || 0;
   };
 
@@ -108,21 +154,15 @@ export function AuthProvider({ children }) {
     }
   }, [user?.id]);
 
-  const login = async (token, userData) => {
-    await saveToken(token);
+  const login = async (nextToken, userData) => {
+    await saveToken(nextToken);
     await saveUser(userData);
-    setToken(token);
+    setToken(nextToken);
     setUser(userData);
   };
 
   const logout = async () => {
-    await removeToken();
-    await removeUser();
-    setToken(null);
-    setUser(null);
-    setFriendCount(0);
-    setFriendLink("");
-    setStreak(0);
+    await clearSession();
   };
 
   const refreshFeed = () => {
@@ -138,6 +178,7 @@ export function AuthProvider({ children }) {
         friendCount,
         friendLink,
         streak,
+        postedToday,
         feedRefreshKey,
         login,
         logout,

@@ -13,10 +13,13 @@ import {
   View,
 } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
+import { router } from "expo-router";
 import { createSnapApi } from "../../api/snapApi";
 import { sendFriendRequestApi } from "../../api/friendApi";
 import { AuthContext } from "../../context/AuthContext";
 import { COLORS } from "../../constants/colors";
+import { compressSnapImage } from "../../utils/imageCompress";
+import { extractFriendIdentifier } from "../../utils/friendLink";
 import { moodOptions } from "../../utils/moods";
 
 export default function CameraScreen() {
@@ -27,6 +30,7 @@ export default function CameraScreen() {
     refreshFriendCount,
     refreshStreak,
     streak,
+    postedToday,
   } = useContext(AuthContext);
   const cameraRef = useRef(null);
   const [permission, requestPermission] = useCameraPermissions();
@@ -44,30 +48,6 @@ export default function CameraScreen() {
     setCameraFacing((current) => (current === "back" ? "front" : "back"));
   };
 
-
-  const extractFriendIdentifier = (value) => {
-    const raw = String(value || "").trim();
-
-    if (!raw) {
-      return "";
-    }
-
-    const withoutQuery = raw.split("?")[0].split("#")[0];
-    const cleaned = withoutQuery.replace(/\/$/, "");
-    const parts = cleaned.split("/").filter(Boolean);
-    const lastPart = parts[parts.length - 1];
-
-    if (
-      cleaned.includes("moodsnap.cam/") ||
-      cleaned.includes("moodsnap-92ps.onrender.com/friend/") ||
-      cleaned.includes("moodsnap://friend/") ||
-      cleaned.includes("frontend://friend/")
-    ) {
-      return decodeURIComponent(lastPart || "").trim();
-    }
-
-    return raw.replace(/^@/, "").trim();
-  };
 
   const handleOpenAddFriend = () => {
     setFriendLinkInput("");
@@ -166,15 +146,27 @@ export default function CameraScreen() {
     try {
       setPosting(true);
 
+      const compressedUri = await compressSnapImage(capturedImageUri);
+
       await createSnapApi({
-        imageUri: capturedImageUri,
+        imageUri: compressedUri,
         mood: selectedMood.label,
         caption: caption.trim(),
       });
 
       Alert.alert(
         "MoodSnap posted",
-        `Your snap was saved with mood: ${selectedMood.emoji} ${selectedMood.label}`
+        `Your snap was saved with mood: ${selectedMood.emoji} ${selectedMood.label}`,
+        [
+          { text: "Stay here", style: "cancel" },
+          {
+            text: "View feed",
+            onPress: () => {
+              refreshFeed?.();
+              router.push("/tabs/feed");
+            },
+          },
+        ]
       );
 
       refreshFeed?.();
@@ -238,6 +230,18 @@ export default function CameraScreen() {
             </View>
           </View>
         </View>
+
+        {postedToday ? (
+          <View style={styles.postedTodayBanner}>
+            <Text style={styles.postedTodayText}>Posted today — streak safe</Text>
+          </View>
+        ) : (
+          <View style={styles.postedTodayBanner}>
+            <Text style={styles.postedTodayHint}>
+              Snap today to keep your {streak || 0}-day streak
+            </Text>
+          </View>
+        )}
 
         {!hasCaptured || !capturedImageUri ? (
           <>
@@ -433,6 +437,26 @@ const styles = StyleSheet.create({
   streakText: {
     color: "#fff",
     fontWeight: "900",
+  },
+  postedTodayBanner: {
+    position: "absolute",
+    top: 88,
+    alignSelf: "center",
+    zIndex: 2,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+  },
+  postedTodayText: {
+    color: "#9ef0b8",
+    fontWeight: "900",
+    fontSize: 12,
+  },
+  postedTodayHint: {
+    color: "#f0d27a",
+    fontWeight: "800",
+    fontSize: 12,
   },
   flipButton: {
     position: "absolute",

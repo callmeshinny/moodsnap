@@ -11,13 +11,24 @@ export default function CustomButton({
   title,
   onPress,
   loading = false,
-  disabled = false
+  disabled = false,
+  accessibilityLabel,
+  variant = "primary",
 }) {
+  const isSecondary = variant === "secondary";
+
   return (
     <TouchableOpacity
-      style={[styles.button, disabled && styles.disabled]}
+      style={[
+        styles.button,
+        isSecondary && styles.secondary,
+        disabled && styles.disabled,
+      ]}
       onPress={onPress}
       disabled={loading || disabled}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel || title}
+      accessibilityState={{ disabled: loading || disabled, busy: loading }}
     >
       {loading ? (
         <ActivityIndicator color="#fff" />
@@ -34,7 +45,10 @@ const styles = StyleSheet.create({
     paddingVertical: 15,
     borderRadius: 16,
     alignItems: "center",
-    marginTop: 6
+    marginTop: 6,
+  },
+  secondary: {
+    backgroundColor: "#292929",
   },
   disabled: {
     opacity: 0.5

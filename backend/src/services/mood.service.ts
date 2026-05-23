@@ -9,8 +9,12 @@ type SnapRecord = {
   created_at: string;
 };
 
-const toLocalDateKey = (dateValue: string) => {
-  return new Date(dateValue).toISOString().slice(0, 10);
+const toLocalDateKey = (dateValue: string | Date) => {
+  const date = dateValue instanceof Date ? dateValue : new Date(dateValue);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 };
 
 export const getMoodCalendar = async (userId: string) => {
@@ -88,13 +92,17 @@ export const getMoodStreak = async (userId: string) => {
     (snaps || []).map((snap) => toLocalDateKey(snap.created_at))
   );
 
+  const todayKey = toLocalDateKey(new Date());
   let cursor = new Date();
   let streak = 0;
 
-  while (activityDates.has(cursor.toISOString().slice(0, 10))) {
+  while (activityDates.has(toLocalDateKey(cursor))) {
     streak += 1;
     cursor.setDate(cursor.getDate() - 1);
   }
 
-  return streak;
+  return {
+    streak,
+    postedToday: activityDates.has(todayKey),
+  };
 };

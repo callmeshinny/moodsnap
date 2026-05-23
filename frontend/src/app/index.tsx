@@ -1,25 +1,44 @@
 import React, { useContext, useEffect } from "react";
-import { View, ActivityIndicator, StyleSheet } from "react-native";
+import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { router } from "expo-router";
 import { AuthContext } from "../context/AuthContext";
 import { COLORS } from "../constants/colors";
+import { getHasSeenOnboarding } from "../storage/tokenStorage";
 
 export default function Index() {
   const { user, isLoading } = useContext(AuthContext);
 
   useEffect(() => {
-    if (!isLoading) {
-      if (user) {
-        router.replace("/tabs/camera");
-      } else {
-        router.replace("/auth/signin");
-      }
+    if (isLoading) {
+      return;
     }
+
+    const resolveRoute = async () => {
+      if (!user) {
+        router.replace("/auth/signin");
+        return;
+      }
+
+      const seen = await getHasSeenOnboarding();
+
+      if (!seen) {
+        router.replace("/onboarding");
+        return;
+      }
+
+      router.replace("/tabs/camera");
+    };
+
+    resolveRoute();
   }, [user, isLoading]);
 
   return (
     <View style={styles.container}>
-      <ActivityIndicator color={COLORS.primary} size="large" />
+      <ActivityIndicator
+        color={COLORS.primary}
+        size="large"
+        accessibilityLabel="Loading MoodSnap"
+      />
     </View>
   );
 }
@@ -29,6 +48,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.background,
     alignItems: "center",
-    justifyContent: "center"
-  }
+    justifyContent: "center",
+  },
 });
