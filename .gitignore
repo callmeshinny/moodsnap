@@ -3,6 +3,23 @@ node_modules/
 frontend/node_modules/
 backend/node_modules/
 
+# Important project files that should stay tracked
+!README.md
+!backend/README.md
+!frontend/README.md
+!package.json
+!package-lock.json
+!backend/package.json
+!backend/package-lock.json
+!frontend/package.json
+!frontend/package-lock.json
+!render.yaml
+!backend/tsconfig.json
+!frontend/tsconfig.json
+!frontend/app.json
+!frontend/eas.json
+!backend/.env.example
+
 # Environment variables / secrets
 .env
 .env.*
@@ -63,8 +80,14 @@ coverage/
 
 # Cloudinary / Supabase local dump or backup files
 *.sql
+!backend/sql/
+!backend/sql/**
 !backend/sql/*.sql
+!backend/sql/**/*.sql
+!backend/supabase/
+!backend/supabase/**
 !backend/supabase/*.sql
+!backend/supabase/**/*.sql
 *.dump
 *.backup
 

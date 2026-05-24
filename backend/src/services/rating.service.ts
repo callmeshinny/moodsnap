@@ -67,7 +67,7 @@ export const createAppRating = async (
   const existingRating = await getMyRating(userId);
 
   if (existingRating) {
-    throw new Error("You have already rated MoodSnap.");
+    throw new Error("You have already rated MoodSnap. Thank you!");
   }
 
   const rating = normalizeRating(input.rating);
@@ -85,7 +85,7 @@ export const createAppRating = async (
 
   if (error) {
     if (error.code === "23505") {
-      throw new Error("You have already rated MoodSnap.");
+      throw new Error("You have already rated MoodSnap. Thank you!");
     }
 
     throw new Error(error.message);

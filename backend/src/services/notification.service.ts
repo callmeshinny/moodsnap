@@ -2,6 +2,17 @@ import { supabase } from "../config/supabase";
 import { getUserById } from "./user.service";
 import { getVisibleSnapUserIds } from "./friend.service";
 
+const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
+const EXPO_PUSH_BATCH_SIZE = 100;
+
+type ExpoPushMessage = {
+  to: string;
+  sound: "default";
+  title: string;
+  body: string;
+  data: Record<string, unknown>;
+};
+
 type RegisterTokenInput = {
   expoPushToken?: unknown;
   platform?: unknown;
@@ -19,9 +30,12 @@ type SnapNotificationInput = {
   };
 };
 
-const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
+type NotificationPreferencesRecord = {
+  new_snap_enabled?: boolean | null;
+  reminders_enabled?: boolean | null;
+};
 
-const isExpoPushToken = (token: string) => {
+export const isExpoPushToken = (token: string) => {
   return token.startsWith("ExponentPushToken[") || token.startsWith("ExpoPushToken[");
 };
 
@@ -33,6 +47,99 @@ const chunk = <T>(items: T[], size: number) => {
   }
 
   return chunks;
+};
+
+export const sendExpoMessages = async (messages: ExpoPushMessage[]) => {
+  for (const batch of chunk(messages, EXPO_PUSH_BATCH_SIZE)) {
+    const response = await fetch(EXPO_PUSH_URL, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Accept-Encoding": "gzip, deflate",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(batch),
+    });
+
+    if (!response.ok) {
+      const text = await response.text().catch(() => "");
+      throw new Error(`Expo push failed: ${response.status} ${text}`);
+    }
+  }
+};
+
+const mapNotificationPreferences = (
+  record?: NotificationPreferencesRecord | null
+) => ({
+  newSnapEnabled: record?.new_snap_enabled !== false,
+  remindersEnabled: record?.reminders_enabled !== false,
+});
+
+export const getNotificationPreferencesForUser = async (userId: string) => {
+  const { data, error } = await supabase
+    .from("notification_preferences")
+    .select("new_snap_enabled, reminders_enabled")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return mapNotificationPreferences(data);
+};
+
+export const updateNotificationPreferencesForUser = async (
+  userId: string,
+  input: { newSnapEnabled?: unknown; remindersEnabled?: unknown }
+) => {
+  const updates: Record<string, boolean | string> = {
+    user_id: userId,
+    updated_at: new Date().toISOString(),
+  };
+
+  if (typeof input.newSnapEnabled === "boolean") {
+    updates.new_snap_enabled = input.newSnapEnabled;
+  }
+
+  if (typeof input.remindersEnabled === "boolean") {
+    updates.reminders_enabled = input.remindersEnabled;
+  }
+
+  const { data, error } = await supabase
+    .from("notification_preferences")
+    .upsert(updates, { onConflict: "user_id" })
+    .select("new_snap_enabled, reminders_enabled")
+    .single();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return mapNotificationPreferences(data);
+};
+
+const getNewSnapEnabledUserIds = async (userIds: string[]) => {
+  if (userIds.length === 0) {
+    return [];
+  }
+
+  const { data, error } = await supabase
+    .from("notification_preferences")
+    .select("user_id, new_snap_enabled")
+    .in("user_id", userIds);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const disabledUserIds = new Set(
+    (data || [])
+      .filter((preference) => preference.new_snap_enabled === false)
+      .map((preference) => String(preference.user_id))
+  );
+
+  return userIds.filter((userId) => !disabledUserIds.has(userId));
 };
 
 export const registerNotificationToken = async (
@@ -111,33 +218,6 @@ export const unregisterNotificationToken = async (
   return true;
 };
 
-const sendExpoMessages = async (
-  messages: Array<{
-    to: string;
-    sound: "default";
-    title: string;
-    body: string;
-    data: Record<string, unknown>;
-  }>
-) => {
-  for (const batch of chunk(messages, 100)) {
-    const response = await fetch(EXPO_PUSH_URL, {
-      method: "POST",
-      headers: {
-        Accept: "application/json",
-        "Accept-Encoding": "gzip, deflate",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(batch),
-    });
-
-    if (!response.ok) {
-      const text = await response.text().catch(() => "");
-      throw new Error(`Expo push failed: ${response.status} ${text}`);
-    }
-  }
-};
-
 export const sendNewSnapNotifications = async ({
   snap,
 }: SnapNotificationInput) => {
@@ -149,10 +229,16 @@ export const sendNewSnapNotifications = async ({
     return { sent: 0 };
   }
 
+  const enabledRecipientIds = await getNewSnapEnabledUserIds(recipientIds);
+
+  if (enabledRecipientIds.length === 0) {
+    return { sent: 0 };
+  }
+
   const { data: tokens, error } = await supabase
     .from("notification_tokens")
     .select("expo_push_token, user_id")
-    .in("user_id", recipientIds)
+    .in("user_id", enabledRecipientIds)
     .eq("is_active", true);
 
   if (error) {

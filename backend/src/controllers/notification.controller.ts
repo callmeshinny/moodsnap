@@ -3,18 +3,7 @@ import {
   registerNotificationToken,
   unregisterNotificationToken,
 } from "../services/notification.service";
-
-const requireUserId = (req: Request, res: Response): string | null => {
-  if (!req.user?.id) {
-    res.status(401).json({
-      success: false,
-      message: "Authentication is required",
-    });
-    return null;
-  }
-
-  return req.user.id;
-};
+import { requireUserId } from "../middlewares/auth.middleware";
 
 export const registerToken = async (
   req: Request,

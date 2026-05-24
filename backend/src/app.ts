@@ -17,8 +17,6 @@ const app = express();
 
 app.use(cors());
 app.use(express.json());
-app.use("/api/notifications/preferences", notificationPreferencesRoutes);
-app.use("/api/notifications", notificationRoutes);
 
 app.get("/", (_req, res) => {
   res.json({

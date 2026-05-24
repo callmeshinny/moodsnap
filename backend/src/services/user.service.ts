@@ -19,7 +19,7 @@ export type UserRecord = {
   updated_at?: string;
 };
 
-const USER_SELECT =
+export const USER_SELECT =
   "id, username, username_normalized, display_name, email, avatar_url, avatar_public_id, profile_color, timezone, calendar_mode, is_verified, created_at, updated_at";
 
 export const isUuid = (value: string) => {

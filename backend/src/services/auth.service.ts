@@ -13,7 +13,7 @@ import {
 } from "../utils/auth.helpers";
 import { generateToken } from "../utils/generateToken";
 import { sendOtpEmail } from "./email.service";
-import { mapUser, UserRecord } from "./user.service";
+import { mapUser, USER_SELECT, UserRecord } from "./user.service";
 
 type SignUpInput = {
   username: string;
@@ -52,9 +52,6 @@ const OTP_TTL_MS = 10 * 60 * 1000;
 const OTP_RATE_WINDOW_MS = 15 * 60 * 1000;
 const MAX_OTP_REQUESTS = 5;
 const MAX_OTP_ATTEMPTS = 5;
-const USER_SELECT =
-  "id, username, username_normalized, display_name, email, avatar_url, avatar_public_id, profile_color, timezone, calendar_mode, is_verified, created_at, updated_at";
-
 const requireString = (value: unknown, fieldName: string): string => {
   if (typeof value !== "string" || !value.trim()) {
     throw new Error(`${fieldName} is required`);

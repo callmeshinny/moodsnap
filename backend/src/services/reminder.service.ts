@@ -1,6 +1,10 @@
 import { supabase } from "../config/supabase";
-
-const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
+import {
+  getNotificationPreferencesForUser,
+  isExpoPushToken,
+  sendExpoMessages,
+} from "./notification.service";
+import { getSafeTimezone } from "./mood.service";
 
 type ReminderStageKey = "sent_3h" | "sent_12h" | "sent_1d" | "sent_2d" | "sent_3d";
 
@@ -50,35 +54,6 @@ const REMINDER_STAGES: ReminderStage[] = [
   },
 ];
 
-const DEFAULT_TIMEZONE = "Asia/Ho_Chi_Minh";
-
-const isExpoPushToken = (token: string) => {
-  return token.startsWith("ExponentPushToken[") || token.startsWith("ExpoPushToken[");
-};
-
-const chunk = <T>(items: T[], size: number) => {
-  const chunks: T[][] = [];
-
-  for (let index = 0; index < items.length; index += size) {
-    chunks.push(items.slice(index, index + size));
-  }
-
-  return chunks;
-};
-
-const getSafeTimezone = (timezone?: string | null) => {
-  if (!timezone) {
-    return DEFAULT_TIMEZONE;
-  }
-
-  try {
-    new Intl.DateTimeFormat("en-US", { timeZone: timezone }).format(new Date());
-    return timezone;
-  } catch {
-    return DEFAULT_TIMEZONE;
-  }
-};
-
 const getLocalDateTimeLabel = (dateValue: string, timezone: string) => {
   return new Intl.DateTimeFormat("en-US", {
     timeZone: getSafeTimezone(timezone),
@@ -87,33 +62,6 @@ const getLocalDateTimeLabel = (dateValue: string, timezone: string) => {
     hour: "numeric",
     minute: "2-digit",
   }).format(new Date(dateValue));
-};
-
-const sendExpoMessages = async (
-  messages: Array<{
-    to: string;
-    sound: "default";
-    title: string;
-    body: string;
-    data: Record<string, unknown>;
-  }>
-) => {
-  for (const batch of chunk(messages, 100)) {
-    const response = await fetch(EXPO_PUSH_URL, {
-      method: "POST",
-      headers: {
-        Accept: "application/json",
-        "Accept-Encoding": "gzip, deflate",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(batch),
-    });
-
-    if (!response.ok) {
-      const text = await response.text().catch(() => "");
-      throw new Error(`Expo push failed: ${response.status} ${text}`);
-    }
-  }
 };
 
 export const resetReminderStateForSnap = async (
@@ -171,17 +119,8 @@ const getActiveTokensForUser = async (userId: string) => {
 };
 
 const getReminderPreferenceEnabled = async (userId: string) => {
-  const { data, error } = await supabase
-    .from("notification_preferences")
-    .select("reminders_enabled")
-    .eq("user_id", userId)
-    .maybeSingle();
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return data?.reminders_enabled !== false;
+  const preferences = await getNotificationPreferencesForUser(userId);
+  return preferences.remindersEnabled;
 };
 
 const getUserAndLastSnap = async (userId: string) => {

@@ -554,6 +554,10 @@ export default function ProfileScreen() {
             label={item.label}
             onPress={() => {
               if (item.label === "Rate MoodSnap") {
+                if (hasRatedMoodSnap) {
+                  Alert.alert("Already rated", "You have already rated MoodSnap. Thank you!");
+                  return;
+                }
                 setRatingModalVisible(true);
                 return;
               }

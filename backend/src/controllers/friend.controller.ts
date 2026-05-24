@@ -12,18 +12,7 @@ import {
   rejectFriendRequest,
   sendFriendRequest,
 } from "../services/friend.service";
-
-const requireUserId = (req: Request, res: Response): string | null => {
-  if (!req.user?.id) {
-    res.status(401).json({
-      success: false,
-      message: "Authentication is required",
-    });
-    return null;
-  }
-
-  return req.user.id;
-};
+import { requireUserId } from "../middlewares/auth.middleware";
 
 export const getMyFriendLink = async (
   req: Request,

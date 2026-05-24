@@ -360,14 +360,22 @@ export const getAcceptedFriends = async (userId: string) => {
       ? friendship.user_two_id
       : friendship.user_one_id
   );
+  const friendshipsByFriendId = new Map(
+    (friendships || []).map((friendship) => {
+      const friendId =
+        friendship.user_one_id === userId
+          ? friendship.user_two_id
+          : friendship.user_one_id;
+
+      return [friendId, friendship];
+    })
+  );
   const usersById = await getUsersByIds(friendIds);
 
   return friendIds
     .map((friendId) => {
       const user = usersById.get(friendId);
-      const friendship = (friendships || []).find(
-        (item) => item.user_one_id === friendId || item.user_two_id === friendId
-      );
+      const friendship = friendshipsByFriendId.get(friendId);
 
       return user
         ? {
@@ -531,14 +539,19 @@ const getBlockedCounterpartIds = async (userId: string): Promise<string[]> => {
     throw new Error(error.message);
   }
 
-  return (data || []).map((block) =>
-    block.blocker_id === userId ? block.blocked_user_id : block.blocker_id
-  );
+  return (data || [])
+    .map((block) =>
+      block.blocker_id === userId ? block.blocked_user_id : block.blocker_id
+    )
+    .filter(Boolean);
 };
 
 export const getVisibleSnapUserIds = async (userId: string): Promise<string[]> => {
-  const friendIds = await getAcceptedFriendIds(userId);
-  const blockedIds = new Set(await getBlockedCounterpartIds(userId));
+  const [friendIds, blockedCounterpartIds] = await Promise.all([
+    getAcceptedFriendIds(userId),
+    getBlockedCounterpartIds(userId),
+  ]);
+  const blockedIds = new Set(blockedCounterpartIds);
 
   return Array.from(
     new Set([userId, ...friendIds.filter((friendId) => !blockedIds.has(friendId))])

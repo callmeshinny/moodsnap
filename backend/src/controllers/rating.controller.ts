@@ -1,17 +1,6 @@
 import { Request, Response } from "express";
 import { createAppRating, getMyRating } from "../services/rating.service";
-
-const requireUserId = (req: Request, res: Response): string | null => {
-  if (!req.user?.id) {
-    res.status(401).json({
-      success: false,
-      message: "Authentication is required",
-    });
-    return null;
-  }
-
-  return req.user.id;
-};
+import { requireUserId } from "../middlewares/auth.middleware";
 
 export const createRating = async (
   req: Request,
@@ -31,7 +20,7 @@ export const createRating = async (
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Failed to save rating";
-    const status = message.includes("already rated") ? 409 : 400;
+    const status = message.toLowerCase().includes("already rated") ? 409 : 400;
 
     res.status(status).json({
       success: false,

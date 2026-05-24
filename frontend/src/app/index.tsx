@@ -6,7 +6,7 @@ import { COLORS } from "../constants/colors";
 import { getHasSeenOnboarding } from "../storage/tokenStorage";
 
 export default function Index() {
-  const { user, isLoading } = useContext(AuthContext);
+  const { user, isLoading } = useContext(AuthContext as React.Context<any>);
 
   useEffect(() => {
     if (isLoading) {

@@ -9,17 +9,9 @@ type SnapRecord = {
   created_at: string;
 };
 
-const toLocalDateKey = (dateValue: string | Date) => {
-  const date = dateValue instanceof Date ? dateValue : new Date(dateValue);
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-};
-
 const DEFAULT_TIMEZONE = "Asia/Ho_Chi_Minh";
 
-const getSafeTimezone = (timezone?: string | null) => {
+export const getSafeTimezone = (timezone?: string | null) => {
   if (!timezone) {
     return DEFAULT_TIMEZONE;
   }
@@ -30,6 +22,14 @@ const getSafeTimezone = (timezone?: string | null) => {
   } catch {
     return DEFAULT_TIMEZONE;
   }
+};
+
+const toLocalDateKey = (dateValue: string | Date) => {
+  const date = dateValue instanceof Date ? dateValue : new Date(dateValue);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 };
 
 const toZonedDateKey = (dateValue: string | Date, timezone: string) => {

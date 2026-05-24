@@ -1,65 +1,105 @@
 import { Request, Response } from "express";
 import { supabase } from "../config/supabase";
 import { mapUser } from "../services/user.service";
-
-const requireUserId = (req: Request, res: Response): string | null => {
-  if (!req.user?.id) {
-    res.status(401).json({
-      success: false,
-      message: "Authentication is required",
-    });
-    return null;
-  }
-
-  return req.user.id;
-};
+import { requireUserId } from "../middlewares/auth.middleware";
 
 const normalizeQuery = (value: unknown) => {
   if (typeof value !== "string") return "";
   return value.trim().replace(/^@+/, "").toLowerCase();
 };
 
-const getFriendStatus = async (currentUserId: string, targetUserId: string) => {
-  if (currentUserId === targetUserId) {
-    return "self";
+const orderedPair = (firstUserId: string, secondUserId: string) => {
+  return [firstUserId, secondUserId].sort();
+};
+
+const getFriendStatuses = async (
+  currentUserId: string,
+  targetUserIds: string[]
+) => {
+  const uniqueTargetIds = Array.from(new Set(targetUserIds));
+  const statuses = new Map(
+    uniqueTargetIds.map((targetUserId) => [
+      targetUserId,
+      currentUserId === targetUserId ? "self" : "none",
+    ])
+  );
+  const lookupIds = uniqueTargetIds.filter(
+    (targetUserId) => targetUserId !== currentUserId
+  );
+
+  if (lookupIds.length === 0) {
+    return statuses;
   }
 
-  const { data: block } = await supabase
+  const blockFilter = lookupIds
+    .flatMap((targetUserId) => [
+      `and(blocker_id.eq.${currentUserId},blocked_user_id.eq.${targetUserId})`,
+      `and(blocker_id.eq.${targetUserId},blocked_user_id.eq.${currentUserId})`,
+    ])
+    .join(",");
+
+  const { data: blocks, error: blockError } = await supabase
     .from("blocked_users")
-    .select("id")
-    .or(
-      `and(blocker_id.eq.${currentUserId},blocked_user_id.eq.${targetUserId}),and(blocker_id.eq.${targetUserId},blocked_user_id.eq.${currentUserId})`
-    )
-    .limit(1);
+    .select("blocker_id, blocked_user_id")
+    .or(blockFilter);
 
-  if (block?.length) {
-    return "blocked";
+  if (blockError) {
+    throw new Error(blockError.message);
   }
 
-  const [userOneId, userTwoId] = [currentUserId, targetUserId].sort();
+  for (const block of blocks || []) {
+    const targetUserId =
+      block.blocker_id === currentUserId
+        ? block.blocked_user_id
+        : block.blocker_id;
+    statuses.set(String(targetUserId), "blocked");
+  }
 
-  const { data: friendship } = await supabase
+  const friendshipFilter = lookupIds
+    .map((targetUserId) => {
+      const [userOneId, userTwoId] = orderedPair(currentUserId, targetUserId);
+      return `and(user_one_id.eq.${userOneId},user_two_id.eq.${userTwoId})`;
+    })
+    .join(",");
+
+  const { data: friendships, error: friendshipError } = await supabase
     .from("friendships")
-    .select("status, requested_by")
-    .eq("user_one_id", userOneId)
-    .eq("user_two_id", userTwoId)
-    .maybeSingle();
+    .select("user_one_id, user_two_id, status, requested_by")
+    .or(friendshipFilter);
 
-  if (!friendship) {
-    return "none";
+  if (friendshipError) {
+    throw new Error(friendshipError.message);
   }
 
-  if (friendship.status === "accepted") {
-    return "accepted";
+  for (const friendship of friendships || []) {
+    const targetUserId =
+      friendship.user_one_id === currentUserId
+        ? friendship.user_two_id
+        : friendship.user_one_id;
+
+    if (statuses.get(String(targetUserId)) === "blocked") {
+      continue;
+    }
+
+    if (friendship.status === "accepted") {
+      statuses.set(String(targetUserId), "accepted");
+      continue;
+    }
+
+    if (friendship.status === "pending") {
+      statuses.set(
+        String(targetUserId),
+        friendship.requested_by === currentUserId
+          ? "pending_sent"
+          : "pending_received"
+      );
+      continue;
+    }
+
+    statuses.set(String(targetUserId), friendship.status || "none");
   }
 
-  if (friendship.status === "pending") {
-    return friendship.requested_by === currentUserId
-      ? "pending_sent"
-      : "pending_received";
-  }
-
-  return friendship.status || "none";
+  return statuses;
 };
 
 export const searchUsers = async (
@@ -93,22 +133,20 @@ export const searchUsers = async (
       throw new Error(error.message);
     }
 
-    const users = await Promise.all(
-      (data || []).map(async (record) => {
-        const user = mapUser(record);
-        const friendStatus = await getFriendStatus(currentUserId, user.id);
-
-        return {
-          id: user.id,
-          username: user.username,
-          displayName: user.displayName,
-          displayLabel: user.displayLabel,
-          avatarUrl: user.avatarUrl,
-          profileColor: user.profileColor,
-          friendStatus,
-        };
-      })
+    const mappedUsers = (data || []).map(mapUser);
+    const friendStatuses = await getFriendStatuses(
+      currentUserId,
+      mappedUsers.map((user) => user.id)
     );
+    const users = mappedUsers.map((user) => ({
+      id: user.id,
+      username: user.username,
+      displayName: user.displayName,
+      displayLabel: user.displayLabel,
+      avatarUrl: user.avatarUrl,
+      profileColor: user.profileColor,
+      friendStatus: friendStatuses.get(user.id) || "none",
+    }));
 
     res.status(200).json({
       success: true,

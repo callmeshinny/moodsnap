@@ -22,6 +22,23 @@ import { COLORS } from "../../constants/colors";
 import { getMoodMeta } from "../../utils/moods";
 import { formatUploadTime } from "../../utils/time";
 
+const formatFeedCardTime = (createdAt) => {
+  if (!createdAt) {
+    return "";
+  }
+
+  const date = new Date(createdAt);
+
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  return date.toLocaleTimeString([], {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+};
+
 function ZoomableImage({ sourceUri, softFilterEnabled }) {
   const pan = useRef(new Animated.ValueXY()).current;
   const scale = useRef(new Animated.Value(1)).current;
@@ -162,8 +179,6 @@ const FeedCard = React.memo(function FeedCard({
     item.user || (item.userId === currentUser?.id ? currentUser : null);
   const mood = getMoodMeta(item.mood);
   const name = snapUser?.displayLabel || snapUser?.username || "MoodSnap user";
-  const username = snapUser?.username ? `@${snapUser.username}` : "@unknown";
-  const accentColor = snapUser?.profileColor || COLORS.primary;
   const canDelete = currentUser?.id && item.userId === currentUser.id;
 
   return (
@@ -174,7 +189,7 @@ const FeedCard = React.memo(function FeedCard({
       accessibilityRole="button"
       accessibilityLabel={`Open snap from ${name}`}
     >
-      <Image source={{ uri: item.imageUrl }} style={styles.cardImage} contentFit="cover" />
+      <Image source={{ uri: item.thumbnailUrl || item.previewUrl || item.imageUrl }} style={styles.cardImage} contentFit="cover" />
       {item.softFilterEnabled ? (
         <View pointerEvents="none" style={styles.softFilterOverlay} />
       ) : null}
@@ -191,7 +206,7 @@ const FeedCard = React.memo(function FeedCard({
         </TouchableOpacity>
       ) : null}
       <View style={styles.cardTopText}>
-        <Text style={styles.cardTime}>{formatUploadTime(item.createdAt)}</Text>
+        <Text style={styles.cardTime}>{formatFeedCardTime(item.createdAt)}</Text>
         {!!item.caption && (
           <Text style={styles.cardCaption} numberOfLines={2}>
             {item.caption}
@@ -204,9 +219,6 @@ const FeedCard = React.memo(function FeedCard({
           <Avatar user={snapUser} />
           <View>
             <Text style={styles.name}>{name}</Text>
-            <Text style={[styles.username, { color: accentColor }]}>
-              {username}
-            </Text>
             <Text style={styles.moodText}>
               {mood.emoji} {item.mood}
             </Text>
@@ -353,7 +365,7 @@ export default function FeedScreen() {
   useEffect(() => {
     loadFeed();
   }, [loadFeed, feedRefreshKey]);
-\n  useEffect(() => {
+  useEffect(() => {
     if (!targetSnapId || selectedSnap) {
       return;
     }
@@ -422,7 +434,7 @@ export default function FeedScreen() {
       >
         <View style={styles.modalBackdrop}>
           <TouchableOpacity
-            style={styles.closeArea}
+            style={styles.modalOutsidePress}
             activeOpacity={1}
             onPress={() => setSelectedSnap(null)}
           />
@@ -434,13 +446,13 @@ export default function FeedScreen() {
               accessibilityRole="button"
               accessibilityLabel="Close"
             >
-              <Text style={styles.modalCloseText}>Close</Text>
+              <Text style={styles.modalCloseText}>×</Text>
             </TouchableOpacity>
 
             {selectedSnap && (
               <>
                 <ZoomableImage
-                  sourceUri={selectedSnap.imageUrl}
+                  sourceUri={selectedSnap.imageUrl || selectedSnap.thumbnailUrl || selectedSnap.previewUrl}
                   softFilterEnabled={selectedSnap.softFilterEnabled}
                 />
                 <View style={styles.modalInfoOverlay}>
@@ -700,44 +712,61 @@ const styles = StyleSheet.create({
   },
   modalBackdrop: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.96)",
+    backgroundColor: "rgba(0,0,0,0.86)",
+    alignItems: "center",
     justifyContent: "center",
-    padding: 0,
+    padding: 18,
   },
-  closeArea: {
+  modalOutsidePress: {
     ...StyleSheet.absoluteFillObject,
   },
   modalCard: {
-    flex: 1,
-    backgroundColor: "#000",
+    width: "100%",
+    maxHeight: "82%",
+    borderRadius: 34,
+    overflow: "hidden",
+    backgroundColor: "#080808",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
   },
   modalCloseButton: {
     position: "absolute",
-    top: 22,
-    right: 22,
+    top: 12,
+    right: 12,
     zIndex: 10,
+    width: 38,
+    height: 38,
     borderRadius: 19,
-    backgroundColor: "rgba(0,0,0,0.62)",
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    backgroundColor: "rgba(0,0,0,0.58)",
+    alignItems: "center",
+    justifyContent: "center",
   },
   modalCloseText: {
     color: "#fff",
-    fontSize: 14,
+    fontSize: 30,
     fontWeight: "900",
+    lineHeight: 32,
   },
   zoomViewport: {
     width: "100%",
-    flex: 1,
-    backgroundColor: "#050505",
+    height: "100%",
+    minHeight: 420,
+    backgroundColor: "#000",
+    alignItems: "center",
+    justifyContent: "center",
     overflow: "hidden",
+    borderRadius: 34,
   },
   zoomImageWrap: {
-    flex: 1,
+    width: "100%",
+    height: "100%",
+    borderRadius: 34,
+    overflow: "hidden",
   },
   zoomImage: {
     width: "100%",
     height: "100%",
+    borderRadius: 34,
   },
   modalSoftFilterOverlay: {
     ...StyleSheet.absoluteFillObject,

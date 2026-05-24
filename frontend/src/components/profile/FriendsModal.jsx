@@ -67,7 +67,7 @@ export default function FriendsModal({
               accessibilityRole="button"
               accessibilityLabel="Close friends list"
             >
-              <Text style={styles.closeButtonText}>Close</Text>
+              <Text style={styles.closeButtonText}>×</Text>
             </TouchableOpacity>
           </View>
 

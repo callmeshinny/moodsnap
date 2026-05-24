@@ -3,10 +3,10 @@ import { uploadImageToCloudinary } from "../services/upload.service";
 import { supabase } from "../config/supabase";
 import cloudinary from "../config/cloudinary";
 import { getUsersByIds } from "../services/user.service";
-import { getVisibleSnapUserIds, getPendingFriendRequests } from "../services/friend.service";
-import { getMoodStreak } from "../services/mood.service";
+import { getVisibleSnapUserIds } from "../services/friend.service";
 import { sendNewSnapNotifications } from "../services/notification.service";
 import { resetReminderStateForSnap } from "../services/reminder.service";
+import { requireUserId } from "../middlewares/auth.middleware";
 
 const TABLE_NAME = "moodsnap";
 
@@ -43,15 +43,8 @@ const mapSnap = (snap: any, user: any = null) => {
 export const createSnap = async (req: Request, res: Response): Promise<void> => {
   try {
     const { mood, caption, softFilterEnabled } = req.body;
-    const userId = req.user?.id;
-
-    if (!userId) {
-      res.status(401).json({
-        success: false,
-        message: "Authentication is required",
-      });
-      return;
-    }
+    const userId = requireUserId(req, res);
+    if (!userId) return;
 
     if (!req.file) {
       res.status(400).json({
@@ -99,11 +92,13 @@ export const createSnap = async (req: Request, res: Response): Promise<void> => 
       console.error("Failed to send new snap notifications:", notificationError);
     });
 
+    const mappedSnap = mapSnap(snap);
+
     res.status(201).json({
       success: true,
       message: "Snap uploaded to Cloudinary and saved to Supabase successfully",
-      data: { snap: mapSnap(snap) },
-      snap: mapSnap(snap),
+      data: { snap: mappedSnap },
+      snap: mappedSnap,
     });
   } catch (error) {
     const message =
@@ -118,15 +113,8 @@ export const createSnap = async (req: Request, res: Response): Promise<void> => 
 
 export const getSnaps = async (req: Request, res: Response): Promise<void> => {
   try {
-    const userId = req.user?.id;
-
-    if (!userId) {
-      res.status(401).json({
-        success: false,
-        message: "Authentication is required",
-      });
-      return;
-    }
+    const userId = requireUserId(req, res);
+    if (!userId) return;
 
     const visibleUserIds = await getVisibleSnapUserIds(userId);
 
@@ -175,15 +163,8 @@ export const getFeed = async (req: Request, res: Response): Promise<void> => {
         ? req.query.cursor.trim()
         : null;
 
-    const userId = req.user?.id;
-
-    if (!userId) {
-      res.status(401).json({
-        success: false,
-        message: "Authentication is required",
-      });
-      return;
-    }
+    const userId = requireUserId(req, res);
+    if (!userId) return;
 
     const visibleUserIds = await getVisibleSnapUserIds(userId);
 
@@ -232,154 +213,11 @@ export const getFeed = async (req: Request, res: Response): Promise<void> => {
   }
 };
 
-export const getSnapById = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const userId = req.user?.id;
-    const { id } = req.params;
-
-    if (!userId) {
-      res.status(401).json({
-        success: false,
-        message: "Authentication is required",
-      });
-      return;
-    }
-
-    const visibleUserIds = await getVisibleSnapUserIds(userId);
-
-    const { data: snap, error } = await supabase
-      .from(TABLE_NAME)
-      .select("*")
-      .eq("id", id)
-      .maybeSingle();
-
-    if (error) {
-      throw new Error(error.message);
-    }
-
-    if (!snap || !visibleUserIds.includes(String(snap.user_id))) {
-      res.status(404).json({
-        success: false,
-        message: "Snap not found",
-      });
-      return;
-    }
-
-    const usersById = await getUsersByIds([String(snap.user_id)]);
-    const mappedSnap = mapSnap(
-      snap,
-      usersById.get(String(snap.user_id)) || null
-    );
-
-    res.status(200).json({
-      success: true,
-      data: { snap: mappedSnap },
-      snap: mappedSnap,
-    });
-  } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Failed to get snap";
-
-    res.status(500).json({
-      success: false,
-      message,
-    });
-  }
-};
-
-export const getFeedHome = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const limitParam = Number(req.query.limit || 20);
-    const limit = Number.isFinite(limitParam)
-      ? Math.min(Math.max(limitParam, 1), 50)
-      : 20;
-    const cursor =
-      typeof req.query.cursor === "string" && req.query.cursor.trim()
-        ? req.query.cursor.trim()
-        : null;
-
-    const userId = req.user?.id;
-
-    if (!userId) {
-      res.status(401).json({
-        success: false,
-        message: "Authentication is required",
-      });
-      return;
-    }
-
-    const visibleUserIds = await getVisibleSnapUserIds(userId);
-
-    let query = supabase
-      .from(TABLE_NAME)
-      .select("*")
-      .in("user_id", visibleUserIds)
-      .order("created_at", { ascending: false })
-      .limit(limit + 1);
-
-    if (cursor) {
-      query = query.lt("created_at", cursor);
-    }
-
-    const { data: snaps, error } = await query;
-
-    if (error) {
-      throw new Error(error.message);
-    }
-
-    const rows = snaps || [];
-    const pageRows = rows.slice(0, limit);
-    const usersById = await getUsersByIds(
-      pageRows.map((snap) => String(snap.user_id))
-    );
-    const feed = pageRows.map((snap) =>
-      mapSnap(snap, usersById.get(String(snap.user_id)) || null)
-    );
-    const nextCursor =
-      rows.length > limit ? pageRows[pageRows.length - 1]?.created_at : null;
-
-    const [streak, pendingRequests] = await Promise.all([
-      getMoodStreak(userId),
-      getPendingFriendRequests(userId),
-    ]);
-
-    res.status(200).json({
-      success: true,
-      data: {
-        snaps: feed,
-        nextCursor,
-        meta: {
-          streak: streak.streak || 0,
-          hasPostedToday: Boolean(streak.hasPostedToday ?? streak.postedToday),
-          pendingRequestCount: pendingRequests.length,
-        },
-      },
-      snaps: feed,
-      nextCursor,
-    });
-  } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Failed to get home feed";
-
-    res.status(500).json({
-      success: false,
-      message,
-    });
-  }
-};
-
 export const deleteSnap = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const userId = req.user?.id;
-
-    if (!userId) {
-      res.status(401).json({
-        success: false,
-        message: "Authentication is required",
-      });
-      return;
-    }
+    const userId = requireUserId(req, res);
+    if (!userId) return;
 
     const { data: snap, error: findError } = await supabase
       .from(TABLE_NAME)
