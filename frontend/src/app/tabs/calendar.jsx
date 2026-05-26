@@ -368,11 +368,15 @@ export default function CalendarScreen() {
 
                     return (
                       <View style={styles.snapSlide}>
-                        <Image
-                          source={{ uri: item.imageUrl }}
-                          style={styles.modalImage}
-                          resizeMode="contain"
-                        />
+                        {item.imageUrl ? (
+                          <Image
+                            source={{ uri: item.imageUrl }}
+                            style={styles.modalImage}
+                            resizeMode="contain"
+                          />
+                        ) : (
+                          <View style={[styles.modalImage, { backgroundColor: "#ddd" }]} />
+                        )}
                         <Text style={styles.modalSnapTitle}>
                           {mood.emoji} {item.mood}
                         </Text>

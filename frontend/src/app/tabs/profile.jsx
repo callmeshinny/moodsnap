@@ -11,7 +11,7 @@ import {
 } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import * as ImagePicker from "expo-image-picker";
-import { Camera, useCameraPermissions } from "expo-camera";
+import { CameraView, useCameraPermissions } from "expo-camera";
 import { router } from "expo-router";
 import QRCode from "react-native-qrcode-svg";
 import { QrCode, ScanLine, X } from "lucide-react-native";
@@ -167,6 +167,11 @@ export default function ProfileScreen() {
     try {
       const rawData = result?.data || result?.nativeEvent?.data || "";
       const trimmedData = String(rawData).trim();
+
+      if (!trimmedData) {
+        throw new Error("QR code data is empty.");
+      }
+
       let receiverIdOrUsername = "";
 
       if (trimmedData.startsWith("{")) {
@@ -187,17 +192,22 @@ export default function ProfileScreen() {
         throw new Error("This QR code is not a MoodSnap friend code.");
       }
 
-      await sendFriendRequestApi(receiverIdOrUsername);
+      // Wrap API call with timeout
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Request timeout. Please try again.")), 15000)
+      );
+      const apiPromise = sendFriendRequestApi(receiverIdOrUsername);
+
+      await Promise.race([apiPromise, timeoutPromise]);
       await Promise.allSettled([refreshAppData?.(), loadFriendRequests()]);
       setQrScannerVisible(false);
       showToast(`Friend request sent to ${receiverIdOrUsername}.`, "success");
     } catch (error) {
-      showToast(
-        error.response?.data?.message ||
-          error.message ||
-          "Could not scan this QR code.",
-        "error"
-      );
+      const errorMsg =
+        error?.response?.data?.message ||
+        error?.message ||
+        "Could not scan this QR code.";
+      showToast(errorMsg, "error");
       setScanLocked(false);
     }
   };
@@ -651,6 +661,16 @@ export default function ProfileScreen() {
         </View>
       </View>
 
+      {friendRequests && friendRequests.length > 0 && (
+        <FriendRequestsSection
+          friendRequests={friendRequests}
+          error={friendRequestsError}
+          onRetry={loadFriendRequests}
+          onAccept={handleAcceptRequest}
+          onReject={handleRejectRequest}
+        />
+      )}
+
       <Section title="General">
         <SettingRow icon="Aa" label="Edit profile" onPress={handleOpenEditProfile} />
         <SettingRow
@@ -671,14 +691,6 @@ export default function ProfileScreen() {
           }
         />
       </Section>
-
-      <FriendRequestsSection
-        friendRequests={friendRequests}
-        error={friendRequestsError}
-        onRetry={loadFriendRequests}
-        onAccept={handleAcceptRequest}
-        onReject={handleRejectRequest}
-      />
 
       <Section title="About">
         {aboutItems.map((item) => (
@@ -756,10 +768,11 @@ export default function ProfileScreen() {
         onRequestClose={() => setQrScannerVisible(false)}
       >
         <View style={styles.qrScannerScreen}>
-          <Camera
+          <CameraView
             style={styles.qrScannerCamera}
-            onBarCodeScanned={scanLocked ? undefined : handleQrScanned}
-            barCodeScannerSettings={{ barCodeTypes: ["qr"] }}
+            facing="back"
+            onBarcodeScanned={scanLocked ? undefined : handleQrScanned}
+            barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
           />
           <View style={styles.qrScannerTopBar}>
             <TouchableOpacity

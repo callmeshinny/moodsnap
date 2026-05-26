@@ -168,7 +168,11 @@ function MomentFeedCard({ item, currentUser }) {
       accessibilityRole="button"
       accessibilityLabel={`Open moment from ${name}`}
     >
-      <Image source={{ uri: imageUri }} style={styles.cardImage} contentFit="cover" />
+      {imageUri ? (
+        <Image source={{ uri: imageUri }} style={styles.cardImage} contentFit="cover" />
+      ) : (
+        <View style={[styles.cardImage, { backgroundColor: "#ddd" }]} />
+      )}
       {item.softFilterEnabled ? (
         <View pointerEvents="none" style={styles.softFilterOverlay} />
       ) : null}

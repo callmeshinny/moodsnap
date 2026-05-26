@@ -333,7 +333,11 @@ export default function CalendarScreen() {
                       onPress={() => setSelectedCoverImage(snap.imageUrl)}
                       activeOpacity={0.82}
                     >
-                      <Image source={{ uri: snap.imageUrl }} style={styles.coverImage} />
+                      {snap.imageUrl ? (
+                        <Image source={{ uri: snap.imageUrl }} style={styles.coverImage} />
+                      ) : (
+                        <View style={[styles.coverImage, { backgroundColor: "#ddd" }]} />
+                      )}
                       {selected ? (
                         <View
                           style={[

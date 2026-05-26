@@ -28,6 +28,7 @@ import { moodOptions } from "../../utils/moods";
 
 export default function CameraScreen() {
   const {
+    user,
     friendCount,
     refreshAppData,
     refreshFeed,
@@ -224,7 +225,7 @@ export default function CameraScreen() {
         ]}
       >
         <View style={styles.logoRow}>
-          <Text style={styles.logo}>MoodSnap</Text>
+          <Text style={[styles.logo, { color: (user?.profileColor || COLORS.primary) }]}>MoodSnap</Text>
 
           <View style={styles.topBadgeRow}>
             <TouchableOpacity
@@ -515,6 +516,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#000",
     padding: 20,
+    paddingBottom: 140,
     justifyContent: "center",
   },
   preview: {
@@ -801,6 +803,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 12,
     marginTop: 24,
+    marginBottom: 120,
   },
   secondaryButton: {
     flex: 1,

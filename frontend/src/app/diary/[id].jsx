@@ -174,7 +174,11 @@ export default function DiaryDetailsScreen() {
               contentContainerStyle={styles.snapList}
               renderItem={({ item }) => (
                 <View style={styles.snapCard}>
-                  <Image source={{ uri: item.imageUrl }} style={styles.snapImage} />
+                  {item.imageUrl ? (
+                    <Image source={{ uri: item.imageUrl }} style={styles.snapImage} />
+                  ) : (
+                    <View style={[styles.snapImage, { backgroundColor: "#ddd" }]} />
+                  )}
                   <View style={styles.snapCaptionPill}>
                     <Text style={styles.snapCaptionText} numberOfLines={1}>
                       {item.caption || item.mood}
