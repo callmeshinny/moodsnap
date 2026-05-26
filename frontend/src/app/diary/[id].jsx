@@ -4,6 +4,7 @@ import {
   Alert,
   FlatList,
   Image,
+  Modal,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
