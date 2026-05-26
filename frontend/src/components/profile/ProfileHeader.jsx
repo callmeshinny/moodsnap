@@ -33,11 +33,7 @@ export default function ProfileHeader({
               {displayName[0]?.toUpperCase() || "M"}
             </Text>
           )}
-          {!uploadingPhoto && (
-            <View style={styles.avatarEditBadge}>
-              <Text style={styles.avatarEditBadgeText}>📷</Text>
-            </View>
-          )}
+          {/* camera edit badge removed per UX request */}
           {uploadingPhoto && (
             <View style={styles.avatarOverlay}>
               <Text style={styles.avatarOverlayText}>Uploading</Text>

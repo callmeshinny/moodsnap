@@ -25,11 +25,11 @@ import { AuthContext } from "../../context/AuthContext";
 import { COLORS } from "../../constants/colors";
 
 const MOOD_OPTIONS = [
-  { key: "depressed", color: "#9333EA", label: "Depressed" },
-  { key: "sad", color: "#3B82F6", label: "Sad" },
-  { key: "normal", color: "#4B5563", label: "Normal" },
-  { key: "happy", color: "#FB923C", label: "Happy" },
-  { key: "cheerful", color: "#FBBF24", label: "Cheerful" },
+  { key: "depressed", color: "#9333EA", label: "Depressed", emoji: "😞" },
+  { key: "sad", color: "#3B82F6", label: "Sad", emoji: "😢" },
+  { key: "normal", color: "#4B5563", label: "Normal", emoji: "😐" },
+  { key: "happy", color: "#FB923C", label: "Happy", emoji: "😊" },
+  { key: "cheerful", color: "#FBBF24", label: "Cheerful", emoji: "😄" },
 ];
 
 const isHexColor = (value) => /^#[0-9a-fA-F]{6}$/.test(String(value || ""));
@@ -367,25 +367,19 @@ export default function CalendarScreen() {
                 return (
                   <TouchableOpacity
                     key={mood.key}
-                    style={styles.moodOption}
+                    style={[styles.moodOption, active && styles.moodOptionActive]}
                     onPress={() => setSelectedMood(mood.key)}
                     activeOpacity={0.82}
                   >
                     <View
                       style={[
                         styles.moodDot,
-                        {
-                          borderColor: mood.color,
-                          backgroundColor: active ? mood.color : "#121212",
-                        },
+                        { backgroundColor: active ? mood.color : "#121212", borderColor: mood.color },
                       ]}
                     >
-                      <View
-                        style={[
-                          styles.moodInnerDot,
-                          { backgroundColor: active ? "#000" : mood.color },
-                        ]}
-                      />
+                      <Text style={[styles.moodEmoji, active && { color: "#000" }]}>
+                        {mood.emoji}
+                      </Text>
                     </View>
                   </TouchableOpacity>
                 );
@@ -703,6 +697,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
+  },
+  moodOptionActive: {
+    transform: [{ scale: 1.06 }],
+  },
+  moodEmoji: {
+    fontSize: 24,
   },
   moodInnerDot: {
     width: 12,

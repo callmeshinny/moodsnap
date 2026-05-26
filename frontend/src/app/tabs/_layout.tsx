@@ -1,7 +1,8 @@
 import React, { useContext } from "react";
-import { View } from "react-native";
+import { View, TouchableOpacity } from "react-native";
 import { Tabs } from "expo-router";
 import { BookOpen, CalendarDays, Camera, User, Users } from "lucide-react-native";
+import * as Haptics from "expo-haptics";
 import { AuthContext } from "../../context/AuthContext";
 
 const FALLBACK_ACCENT = "#FFB800";
@@ -103,6 +104,15 @@ export default function TabsLayout() {
   return (
     <Tabs
       screenOptions={{
+        tabBarButton: (props) => (
+          <TouchableOpacity
+            {...props}
+            onPress={async () => {
+              await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => null);
+              props.onPress?.();
+            }}
+          />
+        ),
         headerShown: false,
         tabBarStyle: {
           position: "absolute",

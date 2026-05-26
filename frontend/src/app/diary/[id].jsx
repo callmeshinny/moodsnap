@@ -14,15 +14,16 @@ import {
   View,
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
-import { Check, ChevronLeft, Edit3, X } from "lucide-react-native";
+import { Check, ChevronLeft, Edit3, X, Trash2 } from "lucide-react-native";
 import { getDiaryApi, updateDiaryApi } from "../../api/diaryApi";
+import { deleteSnapApi } from "../../api/snapApi";
 
 const MOOD_OPTIONS = [
-  { key: "depressed", color: "#9333EA", label: "Depressed" },
-  { key: "sad", color: "#3B82F6", label: "Sad" },
-  { key: "normal", color: "#4B5563", label: "Normal" },
-  { key: "happy", color: "#FB923C", label: "Happy" },
-  { key: "cheerful", color: "#FBBF24", label: "Cheerful" },
+  { key: "depressed", color: "#9333EA", label: "Depressed", emoji: "😞" },
+  { key: "sad", color: "#3B82F6", label: "Sad", emoji: "😢" },
+  { key: "normal", color: "#4B5563", label: "Normal", emoji: "😐" },
+  { key: "happy", color: "#FB923C", label: "Happy", emoji: "😊" },
+  { key: "cheerful", color: "#FBBF24", label: "Cheerful", emoji: "😄" },
 ];
 
 const getMoodMeta = (key) => {
@@ -58,6 +59,9 @@ export default function DiaryDetailsScreen() {
   const [draftTitle, setDraftTitle] = useState("");
   const [draftContent, setDraftContent] = useState("");
   const [draftMood, setDraftMood] = useState("normal");
+  const [draftCoverImage, setDraftCoverImage] = useState(null);
+  const [viewerVisible, setViewerVisible] = useState(false);
+  const [viewerUri, setViewerUri] = useState(null);
 
   const loadDiary = useCallback(async () => {
     if (!diaryId) {
@@ -72,6 +76,7 @@ export default function DiaryDetailsScreen() {
       setDraftTitle(nextDiary?.title || "");
       setDraftContent(nextDiary?.content || "");
       setDraftMood(nextDiary?.mood || "normal");
+      setDraftCoverImage(nextDiary?.coverImageUrl || null);
     } catch (error) {
       Alert.alert(
         "Could not load diary",
@@ -99,6 +104,7 @@ export default function DiaryDetailsScreen() {
         title: draftTitle,
         content: draftContent,
         mood: draftMood,
+        coverImageUrl: draftCoverImage || null,
       });
       const nextDiary = result.diary || result.data?.diary;
       setDiary(nextDiary);
@@ -123,6 +129,7 @@ export default function DiaryDetailsScreen() {
 
   const mood = getMoodMeta(editing ? draftMood : diary?.mood);
   const snaps = diary?.snaps || [];
+  // viewer state already declared above; don't redeclare here
 
   return (
     <View style={styles.container}>
@@ -172,20 +179,70 @@ export default function DiaryDetailsScreen() {
               keyExtractor={(item) => item.id}
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.snapList}
-              renderItem={({ item }) => (
-                <View style={styles.snapCard}>
-                  {item.imageUrl ? (
-                    <Image source={{ uri: item.imageUrl }} style={styles.snapImage} />
-                  ) : (
-                    <View style={[styles.snapImage, { backgroundColor: "#ddd" }]} />
-                  )}
-                  <View style={styles.snapCaptionPill}>
-                    <Text style={styles.snapCaptionText} numberOfLines={1}>
-                      {item.caption || item.mood}
-                    </Text>
-                  </View>
-                </View>
-              )}
+              renderItem={({ item }) => {
+                const selected = draftCoverImage === item.imageUrl;
+
+                return (
+                  <TouchableOpacity
+                    onPress={() => setDraftCoverImage(item.imageUrl)}
+                    activeOpacity={0.8}
+                    style={[styles.snapCard, selected && styles.snapCardSelected]}
+                  >
+                    {item.imageUrl ? (
+                        <TouchableOpacity
+                          activeOpacity={0.9}
+                          onPress={() => {
+                            setViewerUri(item.imageUrl);
+                            setViewerVisible(true);
+                          }}
+                          style={{ flex: 1 }}
+                        >
+                          <Image source={{ uri: item.imageUrl }} style={styles.snapImage} />
+                        </TouchableOpacity>
+                    ) : (
+                      <View style={[styles.snapImage, { backgroundColor: "#ddd" }]} />
+                    )}
+                      <TouchableOpacity
+                        style={styles.deleteButton}
+                        onPress={() => {
+                          Alert.alert(
+                            "Delete snap",
+                            "Are you sure you want to delete this snap? This cannot be undone.",
+                            [
+                              { text: "Cancel", style: "cancel" },
+                              {
+                                text: "Delete",
+                                style: "destructive",
+                                onPress: async () => {
+                                  try {
+                                    setLoading(true);
+                                    await deleteSnapApi(item.id);
+                                    await loadDiary();
+                                  } catch (err) {
+                                    Alert.alert(
+                                      "Delete failed",
+                                      err.response?.data?.message || err.message || "Could not delete snap"
+                                    );
+                                  } finally {
+                                    setLoading(false);
+                                  }
+                                },
+                              },
+                            ]
+                          );
+                        }}
+                      >
+                        <Trash2 size={16} color="#fff" strokeWidth={3} />
+                      </TouchableOpacity>
+
+                      <View style={styles.snapCaptionPill}>
+                        <Text style={styles.snapCaptionText} numberOfLines={1}>
+                          {item.caption || item.mood}
+                        </Text>
+                      </View>
+                  </TouchableOpacity>
+                );
+              }}
             />
           ) : (
             <View style={styles.noSnapsCard}>
@@ -210,10 +267,11 @@ export default function DiaryDetailsScreen() {
                       onPress={() => setDraftMood(option.key)}
                       style={[
                         styles.editMoodButton,
-                        { backgroundColor: option.color },
                         draftMood === option.key && styles.editMoodButtonActive,
                       ]}
-                    />
+                    >
+                      <Text style={styles.editMoodEmoji}>{option.emoji}</Text>
+                    </TouchableOpacity>
                   ))}
                 </View>
                 <TextInput
@@ -243,6 +301,29 @@ export default function DiaryDetailsScreen() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <Modal visible={viewerVisible} animationType="fade" onRequestClose={() => setViewerVisible(false)}>
+        <View style={styles.viewerScreen}>
+          <TouchableOpacity
+            onPress={() => setViewerVisible(false)}
+            style={styles.viewerClose}
+            accessibilityRole="button"
+          >
+            <X size={22} color="#fff" strokeWidth={3} />
+          </TouchableOpacity>
+          <ScrollView
+            maximumZoomScale={4}
+            minimumZoomScale={1}
+            contentContainerStyle={styles.viewerScroll}
+            showsHorizontalScrollIndicator={false}
+            showsVerticalScrollIndicator={false}
+          >
+            {viewerUri ? (
+              <Image source={{ uri: viewerUri }} style={styles.viewerImage} resizeMode="contain" />
+            ) : null}
+          </ScrollView>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -282,8 +363,6 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     textTransform: "uppercase",
     letterSpacing: 1,
-    textAlign: "center",
-    marginHorizontal: 12,
   },
   headerAction: {
     minWidth: 42,
@@ -321,6 +400,22 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     backgroundColor: "#18181B",
     marginRight: 16,
+  },
+  deleteButton: {
+    position: "absolute",
+    top: 10,
+    right: 10,
+    zIndex: 6,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  snapCardSelected: {
+    borderWidth: 3,
+    borderColor: "#FFB800",
   },
   snapImage: {
     width: "100%",
@@ -400,6 +495,9 @@ const styles = StyleSheet.create({
   editMoodButtonActive: {
     borderColor: "#fff",
   },
+  editMoodEmoji: {
+    fontSize: 20,
+  },
   diaryTitle: {
     color: "#fff",
     fontSize: 34,
@@ -427,5 +525,30 @@ const styles = StyleSheet.create({
     lineHeight: 27,
     minHeight: 220,
     marginTop: 18,
+  },
+  viewerScreen: {
+    flex: 1,
+    backgroundColor: "#000",
+  },
+  viewerClose: {
+    position: "absolute",
+    top: 56,
+    left: 20,
+    zIndex: 10,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  viewerScroll: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  viewerImage: {
+    width: "100%",
+    height: "100%",
   },
 });

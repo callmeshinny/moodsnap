@@ -1,4 +1,4 @@
-import React, { useContext, useRef, useState } from "react";
+import React, { useContext, useRef, useState, useEffect } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -11,6 +11,8 @@ import {
   TouchableOpacity,
   TouchableWithoutFeedback,
   View,
+  Animated,
+  PanResponder,
 } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { router } from "expo-router";
@@ -39,6 +41,26 @@ export default function CameraScreen() {
   } = useContext(AuthContext);
   const { showToast } = useToast();
   const cameraRef = useRef(null);
+  const sheetTranslate = useRef(new Animated.Value(0)).current;
+  const SHEET_EXPANDED = -260;
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, gesture) => {
+        return Math.abs(gesture.dy) > 6 && hasCaptured;
+      },
+      onPanResponderMove: (_, gesture) => {
+        const next = Math.min(Math.max(gesture.dy, SHEET_EXPANDED), 0);
+        sheetTranslate.setValue(next);
+      },
+      onPanResponderRelease: (_, gesture) => {
+        const shouldExpand = gesture.dy < -80;
+        Animated.spring(sheetTranslate, {
+          toValue: shouldExpand ? SHEET_EXPANDED : 0,
+          useNativeDriver: true,
+        }).start();
+      },
+    })
+  ).current;
   const [permission, requestPermission] = useCameraPermissions();
   const [hasCaptured, setHasCaptured] = useState(false);
   const [capturedImageUri, setCapturedImageUri] = useState(null);
@@ -153,6 +175,7 @@ export default function CameraScreen() {
     setCapturedImageUri(null);
     setSelectedMood(null);
     setCaption("");
+    sheetTranslate.setValue(0);
   };
 
   const handlePost = async () => {
@@ -184,6 +207,7 @@ export default function CameraScreen() {
       setCapturedImageUri(null);
       setSelectedMood(null);
       setCaption("");
+      sheetTranslate.setValue(0);
       showToast(`Saved as ${selectedMood.emoji} ${selectedMood.label}`, "success");
       router.push("/tabs/feed");
     } catch (error) {
@@ -221,6 +245,7 @@ export default function CameraScreen() {
       <View
         style={[
           styles.preview,
+          { height: hasCaptured ? "44%" : "64%" },
           hasCaptured && selectedMood && { borderColor: selectedMood.color },
         ]}
       >
@@ -344,102 +369,107 @@ export default function CameraScreen() {
         </>
       ) : (
         <>
-          <Text style={styles.sectionTitle}>How are you feeling?</Text>
-
-          <TouchableOpacity
-            style={[
-              styles.moodSummary,
-              selectedMood && { borderColor: selectedMood.color },
-            ]}
-            onPress={() => setEmojiPickerVisible(true)}
-            activeOpacity={0.82}
-            accessibilityRole="button"
-            accessibilityLabel="Open mood picker"
+          <Animated.View
+            style={[styles.postSheet, { transform: [{ translateY: sheetTranslate }] }]}
+            {...panResponder.panHandlers}
           >
-            <View
+            <Text style={styles.sectionTitle}>How are you feeling?</Text>
+
+            <TouchableOpacity
               style={[
-                styles.selectedMoodOrb,
-                selectedMood && { backgroundColor: selectedMood.color },
+                styles.moodSummary,
+                selectedMood && { borderColor: selectedMood.color },
               ]}
-            >
-              <Text style={styles.selectedMoodEmoji}>
-                {selectedMood?.emoji || "🙂"}
-              </Text>
-            </View>
-            <View style={styles.moodSummaryTextWrap}>
-              <Text style={styles.moodSummaryLabel}>
-                {selectedMood?.label || "Choose mood"}
-              </Text>
-              <Text style={styles.moodSummaryHint}>Tap to open all moods</Text>
-            </View>
-            <SmilePlus size={22} color="#fff" strokeWidth={2.7} />
-          </TouchableOpacity>
-
-          <View style={styles.moodRow}>
-            {moodOptions.slice(0, 5).map((mood) => (
-              <TouchableOpacity
-                key={mood.label}
-                style={[
-                  styles.moodButton,
-                  selectedMood?.label === mood.label && {
-                    backgroundColor: mood.color,
-                    transform: [{ scale: 1.08 }],
-                  },
-                ]}
-                onPress={() => setSelectedMood(mood)}
-              >
-                <Text style={styles.moodEmoji}>{mood.emoji}</Text>
-              </TouchableOpacity>
-            ))}
-            <TouchableOpacity
-              style={styles.moodButton}
               onPress={() => setEmojiPickerVisible(true)}
-              activeOpacity={0.8}
+              activeOpacity={0.82}
               accessibilityRole="button"
-              accessibilityLabel="More moods"
+              accessibilityLabel="Open mood picker"
             >
-              <Text style={styles.moreMoodText}>+</Text>
+              <View
+                style={[
+                  styles.selectedMoodOrb,
+                  selectedMood && { backgroundColor: selectedMood.color },
+                ]}
+              >
+                <Text style={styles.selectedMoodEmoji}>
+                  {selectedMood?.emoji || "🙂"}
+                </Text>
+              </View>
+              <View style={styles.moodSummaryTextWrap}>
+                <Text style={styles.moodSummaryLabel}>
+                  {selectedMood?.label || "Choose mood"}
+                </Text>
+                <Text style={styles.moodSummaryHint}>Tap to open all moods</Text>
+              </View>
+              <SmilePlus size={22} color="#fff" strokeWidth={2.7} />
             </TouchableOpacity>
-          </View>
 
-          <TouchableOpacity
-            style={[styles.journalCard, caption.trim() && styles.journalCardActive]}
-            onPress={() => setJournalModalVisible(true)}
-            activeOpacity={0.82}
-            accessibilityRole="button"
-            accessibilityLabel={caption.trim() ? "Edit journal note" : "Add journal note"}
-          >
-            <View style={styles.journalIconBubble}>
-              <BookText size={19} color="#fff" strokeWidth={2.7} />
+            <View style={styles.moodRow}>
+              {moodOptions.slice(0, 5).map((mood) => (
+                <TouchableOpacity
+                  key={mood.label}
+                  style={[
+                    styles.moodButton,
+                    selectedMood?.label === mood.label && {
+                      backgroundColor: mood.color,
+                      transform: [{ scale: 1.08 }],
+                    },
+                  ]}
+                  onPress={() => setSelectedMood(mood)}
+                >
+                  <Text style={styles.moodEmoji}>{mood.emoji}</Text>
+                </TouchableOpacity>
+              ))}
+              <TouchableOpacity
+                style={styles.moodButton}
+                onPress={() => setEmojiPickerVisible(true)}
+                activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityLabel="More moods"
+              >
+                <Text style={styles.moreMoodText}>+</Text>
+              </TouchableOpacity>
             </View>
-            <View style={styles.journalTextWrap}>
-              <Text style={styles.journalTitle}>
-                {caption.trim() ? "Journal added" : "Add journal"}
-              </Text>
-              <Text style={styles.journalBody} numberOfLines={2}>
-                {caption.trim() || "Save a quick note with this snap."}
-              </Text>
-            </View>
-            <Text style={styles.journalAction}>
-              {caption.trim() ? "Edit" : "Add"}
-            </Text>
-          </TouchableOpacity>
-
-          <View style={styles.actionRow}>
-            <TouchableOpacity style={styles.secondaryButton} onPress={handleRetake}>
-              <Text style={styles.secondaryText}>Retake</Text>
-            </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.postButton, posting && styles.disabledButton]}
-              onPress={handlePost}
-              disabled={posting}
+              style={[styles.journalCard, caption.trim() && styles.journalCardActive]}
+              onPress={() => setJournalModalVisible(true)}
+              activeOpacity={0.82}
+              accessibilityRole="button"
+              accessibilityLabel={caption.trim() ? "Edit journal note" : "Add journal note"}
             >
-              <Text style={styles.postText}>
-                {posting ? "Posting..." : "Post Snap"}
+              <View style={styles.journalIconBubble}>
+                <BookText size={19} color="#fff" strokeWidth={2.7} />
+              </View>
+              <View style={styles.journalTextWrap}>
+                <Text style={styles.journalTitle}>
+                  {caption.trim() ? "Journal added" : "Add journal"}
+                </Text>
+                <Text style={styles.journalBody} numberOfLines={2}>
+                  {caption.trim() || "Save a quick note with this snap."}
+                </Text>
+              </View>
+              <Text style={styles.journalAction}>
+                {caption.trim() ? "Edit" : "Add"}
               </Text>
             </TouchableOpacity>
-          </View>
+
+            <View style={styles.actionRow}>
+              <TouchableOpacity style={styles.secondaryButton} onPress={handleRetake}>
+                <Text style={styles.secondaryText}>Retake</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.postButton, posting && styles.disabledButton]}
+                onPress={handlePost}
+                disabled={posting}
+              >
+                <Text style={styles.postText}>
+                  {posting ? "Posting..." : "Post Snap"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </Animated.View>
         </>
       )}
 
@@ -868,6 +898,14 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
+  },
+  postSheet: {
+    position: "absolute",
+    left: 20,
+    right: 20,
+    bottom: 20,
+    zIndex: 6,
+    paddingBottom: 6,
   },
   friendCountBadge: {
     backgroundColor: "rgba(0,0,0,0.56)",

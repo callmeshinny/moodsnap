@@ -269,41 +269,86 @@ export default function ProfileScreen() {
   };
 
   const handleEditProfilePhoto = async () => {
-    try {
-      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    const chooseFromLibrary = async () => {
+      try {
+        const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
-      if (!permission.granted) {
+        if (!permission.granted) {
+          Alert.alert(
+            "Photo permission required",
+            "Please allow photo access to update your profile photo."
+          );
+          return;
+        }
+
+        const result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          allowsEditing: true,
+          aspect: [1, 1],
+          quality: 0.85,
+        });
+
+        if (result.canceled || !result.assets?.[0]?.uri) {
+          return;
+        }
+
+        setUploadingPhoto(true);
+        await updateProfilePhoto?.(result.assets[0].uri);
+        Alert.alert("Profile photo updated", "Your new photo is live.");
+      } catch (error) {
         Alert.alert(
-          "Photo permission required",
-          "Please allow photo access to update your profile photo."
+          "Upload failed",
+          error.response?.data?.message ||
+            error.message ||
+            "Could not update your profile photo."
         );
-        return;
+      } finally {
+        setUploadingPhoto(false);
       }
+    };
 
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: "images",
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.85,
-      });
+    const takePhoto = async () => {
+      try {
+        const resultPerm = await requestCameraPermission();
 
-      if (result.canceled || !result.assets?.[0]?.uri) {
-        return;
+        if (!resultPerm.granted) {
+          Alert.alert(
+            "Camera permission required",
+            "Please allow camera access to take a profile photo."
+          );
+          return;
+        }
+
+        const result = await ImagePicker.launchCameraAsync({
+          allowsEditing: true,
+          aspect: [1, 1],
+          quality: 0.85,
+        });
+
+        if (result.canceled || !result.assets?.[0]?.uri) {
+          return;
+        }
+
+        setUploadingPhoto(true);
+        await updateProfilePhoto?.(result.assets[0].uri);
+        Alert.alert("Profile photo updated", "Your new photo is live.");
+      } catch (error) {
+        Alert.alert(
+          "Upload failed",
+          error.response?.data?.message ||
+            error.message ||
+            "Could not update your profile photo."
+        );
+      } finally {
+        setUploadingPhoto(false);
       }
+    };
 
-      setUploadingPhoto(true);
-      await updateProfilePhoto?.(result.assets[0].uri);
-      Alert.alert("Profile photo updated", "Your new photo is live.");
-    } catch (error) {
-      Alert.alert(
-        "Upload failed",
-        error.response?.data?.message ||
-          error.message ||
-          "Could not update your profile photo."
-      );
-    } finally {
-      setUploadingPhoto(false);
-    }
+    Alert.alert("Update profile photo", "Choose a photo source", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Take photo", onPress: takePhoto },
+      { text: "Choose from library", onPress: chooseFromLibrary },
+    ]);
   };
 
   const handleDeleteAccount = async () => {
