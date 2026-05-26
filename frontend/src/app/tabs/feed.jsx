@@ -1,11 +1,14 @@
-import React, { useCallback, useContext, useEffect, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   ActivityIndicator,
-  Alert,
-  Animated,
   FlatList,
-  Modal,
-  PanResponder,
   RefreshControl,
   StyleSheet,
   Text,
@@ -13,14 +16,51 @@ import {
   View,
 } from "react-native";
 import { Image } from "expo-image";
-import { router, useLocalSearchParams } from "expo-router";
-import { deleteSnapApi, getFeedApi } from "../../api/snapApi";
-import CustomButton from "../../components/CustomButton";
-import MutedText from "../../components/MutedText";
+import { useFocusEffect } from "@react-navigation/native";
+import { router } from "expo-router";
+import { getDiaryFeedApi } from "../../api/diaryApi";
 import { AuthContext } from "../../context/AuthContext";
 import { COLORS } from "../../constants/colors";
 import { getMoodMeta } from "../../utils/moods";
-import { formatUploadTime } from "../../utils/time";
+
+const toDateKey = (date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+const buildDateStrip = (count = 6) => {
+  const dates = [];
+
+  for (let index = count - 1; index >= 0; index -= 1) {
+    const date = new Date();
+    date.setDate(date.getDate() - index);
+    dates.push({
+      id: toDateKey(date),
+      dayOfWeek: date.toLocaleDateString("en-US", { weekday: "short" }),
+      dayOfMonth: String(date.getDate()),
+      isToday: index === 0,
+    });
+  }
+
+  return dates;
+};
+
+const isHexColor = (value) => /^#[0-9a-fA-F]{6}$/.test(String(value || ""));
+
+const getReadableTextColor = (hex) => {
+  if (!isHexColor(hex)) {
+    return "#000";
+  }
+
+  const red = parseInt(hex.slice(1, 3), 16);
+  const green = parseInt(hex.slice(3, 5), 16);
+  const blue = parseInt(hex.slice(5, 7), 16);
+  const luminance = (0.299 * red + 0.587 * green + 0.114 * blue) / 255;
+
+  return luminance > 0.58 ? "#000" : "#fff";
+};
 
 const formatFeedCardTime = (createdAt) => {
   if (!createdAt) {
@@ -39,121 +79,54 @@ const formatFeedCardTime = (createdAt) => {
   });
 };
 
-function ZoomableImage({ sourceUri, softFilterEnabled }) {
-  const pan = useRef(new Animated.ValueXY()).current;
-  const scale = useRef(new Animated.Value(1)).current;
-  const lastPan = useRef({ x: 0, y: 0 });
-  const lastScale = useRef(1);
-  const gestureStart = useRef({
-    distance: 0,
-    scale: 1,
-    pan: { x: 0, y: 0 },
-    point: { x: 0, y: 0 },
-  });
+const normalizeDiaryFeedItems = (diaries, currentUser) => {
+  return (diaries || [])
+    .flatMap((diary) => {
+      const owner =
+        diary.user || (diary.userId === currentUser?.id ? currentUser : null);
+      const snaps = diary.snaps || [];
 
-  const getTouchDistance = (touches) => {
-    const [first, second] = touches;
-    const x = first.pageX - second.pageX;
-    const y = first.pageY - second.pageY;
-    return Math.sqrt(x * x + y * y);
-  };
+      if (snaps.length > 0) {
+        return snaps
+          .filter((snap) => snap.imageUrl || snap.thumbnailUrl || snap.previewUrl)
+          .map((snap) => ({
+            ...snap,
+            diaryId: diary.isSnapFallback ? null : diary.id,
+            entryDate: diary.entryDate,
+            user: snap.user || owner,
+            userId: snap.userId || diary.userId,
+          }));
+      }
 
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (_, gestureState) =>
-        Math.abs(gestureState.dx) > 2 || Math.abs(gestureState.dy) > 2,
-      onPanResponderGrant: (event) => {
-        const touches = event.nativeEvent.touches;
+      if (!diary.coverImageUrl) {
+        return [];
+      }
 
-        gestureStart.current = {
-          distance: touches.length >= 2 ? getTouchDistance(touches) : 0,
-          scale: lastScale.current,
-          pan: { ...lastPan.current },
-          point: {
-            x: touches[0]?.pageX || 0,
-            y: touches[0]?.pageY || 0,
-          },
-        };
-      },
-      onPanResponderMove: (event, gestureState) => {
-        const touches = event.nativeEvent.touches;
-
-        if (touches.length >= 2 && gestureStart.current.distance > 0) {
-          const nextScale = Math.min(
-            Math.max(
-              gestureStart.current.scale *
-                (getTouchDistance(touches) / gestureStart.current.distance),
-              1
-            ),
-            4
-          );
-          lastScale.current = nextScale;
-          scale.setValue(nextScale);
-          return;
-        }
-
-        if (lastScale.current <= 1) {
-          return;
-        }
-
-        const nextX = gestureStart.current.pan.x + gestureState.dx;
-        const nextY = gestureStart.current.pan.y + gestureState.dy;
-        lastPan.current = { x: nextX, y: nextY };
-        pan.setValue(lastPan.current);
-      },
-      onPanResponderRelease: () => {
-        if (lastScale.current <= 1.02) {
-          lastScale.current = 1;
-          lastPan.current = { x: 0, y: 0 };
-          Animated.parallel([
-            Animated.spring(scale, {
-              toValue: 1,
-              useNativeDriver: true,
-            }),
-            Animated.spring(pan, {
-              toValue: { x: 0, y: 0 },
-              useNativeDriver: true,
-            }),
-          ]).start();
-        }
-      },
-      onPanResponderTerminate: () => {
-        lastPan.current = { x: 0, y: 0 };
-      },
+      return [
+        {
+          id: `diary-cover-${diary.id}`,
+          diaryId: diary.isSnapFallback ? null : diary.id,
+          userId: diary.userId,
+          user: owner,
+          mood: diary.mood || "Happy",
+          caption: diary.title || diary.content || "Daily moments",
+          imageUrl: diary.coverImageUrl,
+          createdAt: diary.createdAt || `${diary.entryDate}T12:00:00`,
+          softFilterEnabled: false,
+          entryDate: diary.entryDate,
+        },
+      ];
     })
-  ).current;
-
-  return (
-    <View style={styles.zoomViewport} {...panResponder.panHandlers}>
-      <Animated.View
-        style={[
-          styles.zoomImageWrap,
-          {
-            transform: [
-              { translateX: pan.x },
-              { translateY: pan.y },
-              { scale },
-            ],
-          },
-        ]}
-      >
-        <Image
-          source={{ uri: sourceUri }}
-          style={styles.zoomImage}
-          contentFit="contain"
-        />
-        {softFilterEnabled ? (
-          <View pointerEvents="none" style={styles.modalSoftFilterOverlay} />
-        ) : null}
-      </Animated.View>
-    </View>
-  );
-}
+    .sort(
+      (first, second) =>
+        new Date(second.createdAt || 0).getTime() -
+        new Date(first.createdAt || 0).getTime()
+    );
+};
 
 const Avatar = React.memo(function Avatar({ user }) {
   const ringColor = user?.profileColor || COLORS.primary;
-  const displayName = user?.displayLabel || user?.username || "MoodSnap user";
+  const displayName = user?.displayLabel || user?.displayName || user?.username || "M";
   const initial = displayName?.[0]?.toUpperCase() || "?";
 
   return (
@@ -169,42 +142,38 @@ const Avatar = React.memo(function Avatar({ user }) {
   );
 });
 
-const FeedCard = React.memo(function FeedCard({
-  item,
-  onOpen,
-  currentUser,
-  onDelete,
-}) {
+function MomentFeedCard({ item, currentUser }) {
   const snapUser =
     item.user || (item.userId === currentUser?.id ? currentUser : null);
   const mood = getMoodMeta(item.mood);
-  const name = snapUser?.displayLabel || snapUser?.username || "MoodSnap user";
-  const canDelete = currentUser?.id && item.userId === currentUser.id;
+  const name =
+    snapUser?.displayLabel ||
+    snapUser?.displayName ||
+    snapUser?.username ||
+    "MoodSnap user";
+  const imageUri = item.thumbnailUrl || item.previewUrl || item.imageUrl;
+
+  const openItem = () => {
+    if (item.diaryId) {
+      router.push({ pathname: "/diary/[id]", params: { id: item.diaryId } });
+    }
+  };
 
   return (
     <TouchableOpacity
-      style={[styles.card, { aspectRatio: 5 / 3 }]}
-      onPress={() => onOpen(item)}
+      style={styles.momentCard}
+      onPress={openItem}
       activeOpacity={0.9}
+      disabled={!item.diaryId}
       accessibilityRole="button"
-      accessibilityLabel={`Open snap from ${name}`}
+      accessibilityLabel={`Open moment from ${name}`}
     >
-      <Image source={{ uri: item.thumbnailUrl || item.previewUrl || item.imageUrl }} style={styles.cardImage} contentFit="cover" />
+      <Image source={{ uri: imageUri }} style={styles.cardImage} contentFit="cover" />
       {item.softFilterEnabled ? (
         <View pointerEvents="none" style={styles.softFilterOverlay} />
       ) : null}
       <View style={styles.cardScrim} />
-      {canDelete ? (
-        <TouchableOpacity
-          style={styles.deletePill}
-          onPress={() => onDelete(item)}
-          activeOpacity={0.8}
-          accessibilityRole="button"
-          accessibilityLabel="Delete this snap"
-        >
-          <Text style={styles.deletePillText}>Delete</Text>
-        </TouchableOpacity>
-      ) : null}
+
       <View style={styles.cardTopText}>
         <Text style={styles.cardTime}>{formatFeedCardTime(item.createdAt)}</Text>
         {!!item.caption && (
@@ -217,10 +186,12 @@ const FeedCard = React.memo(function FeedCard({
       <View style={styles.cardFooter}>
         <View style={styles.userRow}>
           <Avatar user={snapUser} />
-          <View>
-            <Text style={styles.name}>{name}</Text>
-            <Text style={styles.moodText}>
-              {mood.emoji} {item.mood}
+          <View style={styles.userCopy}>
+            <Text style={styles.name} numberOfLines={1}>
+              {name}
+            </Text>
+            <Text style={styles.moodText} numberOfLines={1}>
+              {mood.emoji} {item.mood || "Mood"}
             </Text>
           </View>
         </View>
@@ -231,277 +202,149 @@ const FeedCard = React.memo(function FeedCard({
       </View>
     </TouchableOpacity>
   );
-});
-
-function FeedEmptyState({ friendCount, onRetry, showRetry }) {
-  const hasNoFriends = friendCount === 0;
-
-  return (
-    <View style={styles.emptyCard}>
-      <Text style={styles.emptyEmoji}>{hasNoFriends ? "👥" : "🖼️"}</Text>
-      <Text style={styles.emptyTitle}>
-        {hasNoFriends ? "Add friends to fill your feed" : "No snaps yet"}
-      </Text>
-      <MutedText style={styles.emptyText}>
-        {hasNoFriends
-          ? "Invite people from Profile. Once they accept, their mood snaps appear here."
-          : "Post your first snap on Camera, or wait for friends to share theirs."}
-      </MutedText>
-      <View style={styles.emptyActions}>
-        {hasNoFriends ? (
-          <CustomButton
-            title="Invite friends"
-            onPress={() => router.push("/tabs/profile")}
-            accessibilityLabel="Go to profile to invite friends"
-          />
-        ) : null}
-        <CustomButton
-          title="Post a snap"
-          onPress={() => router.push("/tabs/camera")}
-          variant={hasNoFriends ? "secondary" : "primary"}
-          accessibilityLabel="Go to camera to post a snap"
-        />
-      </View>
-      {showRetry ? (
-        <TouchableOpacity onPress={onRetry} style={styles.retryLink}>
-          <Text style={styles.retryText}>Tap to retry</Text>
-        </TouchableOpacity>
-      ) : null}
-    </View>
-  );
 }
 
 export default function FeedScreen() {
-  const { feedRefreshKey, friendCount, user, refreshFeed } = useContext(AuthContext);
-  const params = useLocalSearchParams();
-  const targetSnapId = typeof params.snapId === "string" ? params.snapId : null;
-  const [snaps, setSnaps] = useState([]);
-  const [nextCursor, setNextCursor] = useState(null);
-  const [selectedSnap, setSelectedSnap] = useState(null);
+  const { feedRefreshKey, user } = useContext(AuthContext);
+  const dateStrip = useMemo(() => buildDateStrip(6), []);
+  const todayId = dateStrip[dateStrip.length - 1]?.id || toDateKey(new Date());
+  const [selectedDate, setSelectedDate] = useState(todayId);
+  const selectedDateRef = useRef(todayId);
+  const [diaries, setDiaries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
-  const [loadMoreError, setLoadMoreError] = useState("");
+  const calendarListRef = useRef(null);
+  const accentColor = isHexColor(user?.profileColor) ? user.profileColor : COLORS.primary;
+  const accentTextColor = getReadableTextColor(accentColor);
+  const feedItems = useMemo(
+    () => normalizeDiaryFeedItems(diaries, user),
+    [diaries, user]
+  );
 
-  const loadFeed = useCallback(async ({ reset = false } = {}) => {
-    try {
-      if (reset) {
-        setRefreshing(true);
-      } else {
-        setLoading(true);
+  const loadFeed = useCallback(
+    async (dateToQuery = selectedDateRef.current, options = {}) => {
+      try {
+        if (options.refreshing) {
+          setRefreshing(true);
+        } else {
+          setLoading(true);
+        }
+
+        const result = await getDiaryFeedApi({ date: dateToQuery, limit: 30 });
+        setDiaries(result.diaries || []);
+        setError("");
+      } catch (loadError) {
+        setDiaries([]);
+        setError(loadError.message || "Failed to load feed.");
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
       }
+    },
+    []
+  );
 
-      const result = await getFeedApi({ limit: 20 });
-      setSnaps(result.snaps || []);
-      setNextCursor(result.nextCursor || null);
-      setError("");
-      setLoadMoreError("");
-    } catch (loadError) {
-      setSnaps([]);
-      setNextCursor(null);
-      setError(loadError.message || "Failed to load feed.");
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      loadFeed(selectedDateRef.current);
 
-  const loadMore = async () => {
-    if (!nextCursor || loadingMore) {
-      return;
-    }
-
-    try {
-      setLoadingMore(true);
-      setLoadMoreError("");
-      const result = await getFeedApi({ cursor: nextCursor, limit: 20 });
-      setSnaps((current) => [...current, ...(result.snaps || [])]);
-      setNextCursor(result.nextCursor || null);
-    } catch (loadError) {
-      setLoadMoreError(
-        loadError.message || "Could not load more snaps. Pull down to refresh."
-      );
-    } finally {
-      setLoadingMore(false);
-    }
-  };
-
-  const handleDeleteSnap = (snap) => {
-    Alert.alert("Delete this snap?", "This removes the photo from MoodSnap.", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            await deleteSnapApi(snap.id);
-            setSnaps((current) => current.filter((item) => item.id !== snap.id));
-            setSelectedSnap(null);
-            refreshFeed?.();
-          } catch (deleteError) {
-            Alert.alert(
-              "Delete failed",
-              deleteError.message || "Could not delete this snap."
-            );
-          }
-        },
-      },
-    ]);
-  };
-
-  const renderItem = useCallback(
-    ({ item }) => (
-      <FeedCard
-        item={item}
-        onOpen={setSelectedSnap}
-        currentUser={user}
-        onDelete={handleDeleteSnap}
-      />
-    ),
-    [user]
+      setTimeout(() => {
+        calendarListRef.current?.scrollToEnd({ animated: false });
+      }, 100);
+    }, [loadFeed])
   );
 
   useEffect(() => {
-    loadFeed();
-  }, [loadFeed, feedRefreshKey]);
-  useEffect(() => {
-    if (!targetSnapId || selectedSnap) {
-      return;
-    }
+    loadFeed(selectedDateRef.current);
+  }, [feedRefreshKey, loadFeed]);
 
-    const matchedSnap = snaps.find((snap) => snap.id === targetSnapId);
+  const handleSelectDate = (date) => {
+    selectedDateRef.current = date;
+    setSelectedDate(date);
+    loadFeed(date);
+  };
 
-    if (matchedSnap) {
-      setSelectedSnap(matchedSnap);
-    }
-  }, [targetSnapId, snaps, selectedSnap]);
+  const renderDate = ({ item }) => {
+    const selected = item.id === selectedDate;
 
-  if (loading && snaps.length === 0) {
     return (
-      <View style={styles.centerState}>
-        <ActivityIndicator color={COLORS.primary} />
-      </View>
+      <TouchableOpacity
+        onPress={() => handleSelectDate(item.id)}
+        style={[
+          styles.dateChip,
+          selected && { backgroundColor: accentColor },
+        ]}
+        activeOpacity={0.82}
+      >
+        <Text
+          style={[
+            styles.dateWeekday,
+            selected && { color: accentTextColor },
+          ]}
+        >
+          {item.dayOfWeek}
+        </Text>
+        <Text
+          style={[
+            styles.dateDay,
+            selected && { color: accentTextColor },
+          ]}
+        >
+          {item.dayOfMonth}
+        </Text>
+      </TouchableOpacity>
     );
-  }
+  };
 
   return (
     <View style={styles.container}>
-      <FlatList
-        data={snaps}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.content}
-        ListHeaderComponent={
-          <View style={styles.header}>
-            <Text style={styles.logo}>MoodSnap</Text>
-            {!!error && <Text style={styles.errorText}>{error}</Text>}
-            {!!loadMoreError && (
-              <TouchableOpacity onPress={loadMore}>
-                <Text style={styles.loadMoreError}>{loadMoreError}</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        }
-        ListEmptyComponent={
-          <FeedEmptyState
-            friendCount={friendCount}
-            onRetry={() => loadFeed({ reset: true })}
-            showRetry={Boolean(error)}
-          />
-        }
-        renderItem={renderItem}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            tintColor={COLORS.primary}
-            onRefresh={() => loadFeed({ reset: true })}
-          />
-        }
-        onEndReached={loadMore}
-        onEndReachedThreshold={0.5}
-        ListFooterComponent={
-          loadingMore ? (
-            <ActivityIndicator color={COLORS.primary} style={styles.footerLoader} />
-          ) : null
-        }
-      />
+      <View style={styles.header}>
+        <Text style={[styles.logo, { color: accentColor }]}>MoodSnap</Text>
+        <Text style={styles.title}>{"Friends' moments"}</Text>
+        <Text style={styles.subtitle}>See what your close friends are feeling.</Text>
+      </View>
 
-      <Modal
-        visible={Boolean(selectedSnap)}
-        animationType="fade"
-        transparent
-        onRequestClose={() => setSelectedSnap(null)}
-      >
-        <View style={styles.modalBackdrop}>
-          <TouchableOpacity
-            style={styles.modalOutsidePress}
-            activeOpacity={1}
-            onPress={() => setSelectedSnap(null)}
-          />
-          <View style={styles.modalCard}>
-            <TouchableOpacity
-              style={styles.modalCloseButton}
-              onPress={() => setSelectedSnap(null)}
-              activeOpacity={0.8}
-              accessibilityRole="button"
-              accessibilityLabel="Close"
-            >
-              <Text style={styles.modalCloseText}>×</Text>
-            </TouchableOpacity>
+      <View style={styles.dateStripWrap}>
+        <FlatList
+          ref={calendarListRef}
+          horizontal
+          data={dateStrip}
+          keyExtractor={(item) => item.id}
+          renderItem={renderDate}
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.dateStrip}
+        />
+      </View>
 
-            {selectedSnap && (
-              <>
-                <ZoomableImage
-                  sourceUri={selectedSnap.imageUrl || selectedSnap.thumbnailUrl || selectedSnap.previewUrl}
-                  softFilterEnabled={selectedSnap.softFilterEnabled}
-                />
-                <View style={styles.modalInfoOverlay}>
-                  <Text style={styles.modalTitle}>
-                    {selectedSnap.user?.displayLabel ||
-                      (selectedSnap.userId === user?.id && user?.displayLabel) ||
-                      selectedSnap.user?.username ||
-                      (selectedSnap.userId === user?.id && user?.username) ||
-                      "MoodSnap user"}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.modalUsername,
-                      {
-                        color:
-                          selectedSnap.user?.profileColor ||
-                          (selectedSnap.userId === user?.id &&
-                            user?.profileColor) ||
-                          COLORS.primary,
-                      },
-                    ]}
-                  >
-                    @
-                    {selectedSnap.user?.username ||
-                      (selectedSnap.userId === user?.id && user?.username) ||
-                      "unknown"}
-                  </Text>
-                  <Text style={styles.modalMeta}>
-                    {formatUploadTime(selectedSnap.createdAt)} ·{" "}
-                    {getMoodMeta(selectedSnap.mood).emoji} {selectedSnap.mood}
-                  </Text>
-                  {!!selectedSnap.caption && (
-                    <Text style={styles.modalCaption}>{selectedSnap.caption}</Text>
-                  )}
-                  {selectedSnap.userId === user?.id ? (
-                    <TouchableOpacity
-                      style={styles.modalDeleteButton}
-                      onPress={() => handleDeleteSnap(selectedSnap)}
-                      activeOpacity={0.8}
-                    >
-                      <Text style={styles.modalDeleteText}>Delete snap</Text>
-                    </TouchableOpacity>
-                  ) : null}
-                </View>
-              </>
-            )}
-          </View>
+      {loading && !refreshing ? (
+        <View style={styles.centerState}>
+          <ActivityIndicator color={accentColor} />
         </View>
-      </Modal>
+      ) : (
+        <FlatList
+          data={feedItems}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.listContent}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              tintColor={accentColor}
+              onRefresh={() => loadFeed(selectedDate, { refreshing: true })}
+            />
+          }
+          ListEmptyComponent={
+            <View style={styles.emptyCard}>
+              <Text style={styles.emptyTitle}>No snapshots on this day</Text>
+              <Text style={styles.emptyBody}>
+                Neither you nor your friends posted any diary moments on this date.
+              </Text>
+              {!!error && <Text style={styles.errorText}>{error}</Text>}
+            </View>
+          }
+          renderItem={({ item }) => <MomentFeedCard item={item} currentUser={user} />}
+        />
+      )}
     </View>
   );
 }
@@ -511,47 +354,115 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#000",
   },
-  content: {
-    padding: 18,
-    paddingTop: 64,
-    paddingBottom: 120,
-  },
-  centerState: {
-    flex: 1,
-    backgroundColor: "#000",
-    justifyContent: "center",
-    alignItems: "center",
-  },
   header: {
-    marginBottom: 22,
+    paddingHorizontal: 20,
+    paddingTop: 70,
+    paddingBottom: 10,
   },
   logo: {
-    color: COLORS.primary,
     fontSize: 40,
     fontWeight: "900",
   },
+  title: {
+    color: "#fff",
+    fontSize: 31,
+    fontWeight: "900",
+    marginTop: 8,
+  },
+  subtitle: {
+    color: "#A1A1AA",
+    fontSize: 15,
+    fontWeight: "800",
+    marginTop: 6,
+  },
+  dateStripWrap: {
+    height: 86,
+  },
+  dateStrip: {
+    alignItems: "center",
+    paddingHorizontal: 20,
+  },
+  dateChip: {
+    width: 60,
+    height: 70,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+  },
+  dateWeekday: {
+    color: "#6F6F78",
+    fontSize: 12,
+    fontWeight: "900",
+    textTransform: "uppercase",
+  },
+  dateDay: {
+    color: "#A1A1AA",
+    fontSize: 24,
+    fontWeight: "900",
+    marginTop: 4,
+  },
+  centerState: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  listContent: {
+    paddingHorizontal: 20,
+    paddingBottom: 130,
+  },
+  emptyCard: {
+    minHeight: 344,
+    borderRadius: 36,
+    borderWidth: 1,
+    borderColor: "#262626",
+    backgroundColor: "#080808",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 28,
+    marginTop: 18,
+  },
+  emptyTitle: {
+    color: "#fff",
+    fontSize: 22,
+    fontWeight: "900",
+    textAlign: "center",
+  },
+  emptyBody: {
+    color: "#A1A1AA",
+    fontSize: 16,
+    fontWeight: "700",
+    lineHeight: 25,
+    textAlign: "center",
+    marginTop: 18,
+  },
   errorText: {
     color: COLORS.danger,
-    marginTop: 12,
-    fontWeight: "800",
-  },
-  loadMoreError: {
-    color: COLORS.secondary,
-    marginTop: 10,
-    fontWeight: "800",
     fontSize: 13,
+    fontWeight: "800",
+    textAlign: "center",
+    marginTop: 18,
   },
-  card: {
+  momentCard: {
     width: "100%",
+    aspectRatio: 5 / 3,
     borderRadius: 30,
     overflow: "hidden",
     backgroundColor: "#161616",
-    marginBottom: 20,
+    marginBottom: 18,
   },
   cardImage: {
     ...StyleSheet.absoluteFillObject,
     width: "100%",
     height: "100%",
+  },
+  cardScrim: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.18)",
+  },
+  softFilterOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(255,205,221,0.13)",
   },
   cardTopText: {
     position: "absolute",
@@ -560,6 +471,15 @@ const styles = StyleSheet.create({
     right: 20,
     alignItems: "center",
     zIndex: 2,
+  },
+  cardTime: {
+    color: "#fff",
+    fontSize: 38,
+    fontWeight: "900",
+    textAlign: "center",
+    textShadowColor: "rgba(0,0,0,0.45)",
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 10,
   },
   cardCaption: {
     color: "#fff",
@@ -573,38 +493,6 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 6,
   },
-  cardScrim: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.18)",
-  },
-  softFilterOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(255,205,221,0.13)",
-  },
-  deletePill: {
-    position: "absolute",
-    top: 14,
-    right: 14,
-    zIndex: 4,
-    borderRadius: 999,
-    backgroundColor: "rgba(0,0,0,0.62)",
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-  },
-  deletePillText: {
-    color: "#fff",
-    fontSize: 12,
-    fontWeight: "900",
-  },
-  cardTime: {
-    color: "#fff",
-    fontSize: 38,
-    fontWeight: "900",
-    textAlign: "center",
-    textShadowColor: "rgba(0,0,0,0.45)",
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 10,
-  },
   cardFooter: {
     position: "absolute",
     left: 16,
@@ -615,9 +503,14 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
   },
   userRow: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
+    paddingRight: 12,
+  },
+  userCopy: {
+    flex: 1,
   },
   avatarRing: {
     width: 50,
@@ -638,7 +531,6 @@ const styles = StyleSheet.create({
     width: 42,
     height: 42,
     borderRadius: 21,
-    backgroundColor: COLORS.primary,
     justifyContent: "center",
     alignItems: "center",
   },
@@ -651,11 +543,6 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 21,
     fontWeight: "900",
-  },
-  username: {
-    fontSize: 12,
-    fontWeight: "900",
-    marginTop: 1,
   },
   moodText: {
     color: "#f4f4f4",
@@ -672,148 +559,5 @@ const styles = StyleSheet.create({
   },
   moodPillText: {
     fontSize: 20,
-  },
-  emptyCard: {
-    minHeight: 280,
-    borderRadius: 28,
-    backgroundColor: "#151515",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 24,
-  },
-  emptyEmoji: {
-    fontSize: 42,
-    marginBottom: 12,
-  },
-  emptyTitle: {
-    color: "#fff",
-    fontSize: 22,
-    fontWeight: "900",
-    textAlign: "center",
-  },
-  emptyText: {
-    textAlign: "center",
-    marginTop: 8,
-  },
-  emptyActions: {
-    width: "100%",
-    marginTop: 20,
-    gap: 10,
-  },
-  retryLink: {
-    marginTop: 16,
-  },
-  retryText: {
-    color: COLORS.secondary,
-    fontWeight: "800",
-  },
-  footerLoader: {
-    marginVertical: 20,
-  },
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.86)",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 18,
-  },
-  modalOutsidePress: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  modalCard: {
-    width: "100%",
-    maxHeight: "82%",
-    borderRadius: 34,
-    overflow: "hidden",
-    backgroundColor: "#080808",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-  },
-  modalCloseButton: {
-    position: "absolute",
-    top: 12,
-    right: 12,
-    zIndex: 10,
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: "rgba(0,0,0,0.58)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  modalCloseText: {
-    color: "#fff",
-    fontSize: 30,
-    fontWeight: "900",
-    lineHeight: 32,
-  },
-  zoomViewport: {
-    width: "100%",
-    height: "100%",
-    minHeight: 420,
-    backgroundColor: "#000",
-    alignItems: "center",
-    justifyContent: "center",
-    overflow: "hidden",
-    borderRadius: 34,
-  },
-  zoomImageWrap: {
-    width: "100%",
-    height: "100%",
-    borderRadius: 34,
-    overflow: "hidden",
-  },
-  zoomImage: {
-    width: "100%",
-    height: "100%",
-    borderRadius: 34,
-  },
-  modalSoftFilterOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(255,205,221,0.13)",
-    zIndex: 1,
-  },
-  modalTitle: {
-    color: "#fff",
-    fontSize: 22,
-    fontWeight: "900",
-  },
-  modalUsername: {
-    fontSize: 14,
-    fontWeight: "900",
-    marginTop: 3,
-  },
-  modalCaption: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "800",
-    lineHeight: 22,
-    marginTop: 10,
-  },
-  modalInfoOverlay: {
-    position: "absolute",
-    left: 18,
-    right: 18,
-    bottom: 28,
-    borderRadius: 24,
-    backgroundColor: "rgba(0,0,0,0.58)",
-    padding: 16,
-  },
-  modalDeleteButton: {
-    borderRadius: 16,
-    backgroundColor: "#2a1118",
-    paddingVertical: 12,
-    alignItems: "center",
-    marginTop: 12,
-  },
-  modalDeleteText: {
-    color: COLORS.danger,
-    fontWeight: "900",
-  },
-  modalMeta: {
-    color: "#aaa",
-    fontSize: 14,
-    fontWeight: "800",
-    marginTop: 4,
   },
 });

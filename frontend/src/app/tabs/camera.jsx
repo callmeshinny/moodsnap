@@ -14,8 +14,12 @@ import {
 } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { router } from "expo-router";
+import { BookText, SmilePlus } from "lucide-react-native";
 import { createSnapApi } from "../../api/snapApi";
 import { sendFriendRequestApi } from "../../api/friendApi";
+import EmojiPicker from "../../components/EmojiPicker";
+import JournalModal from "../../components/JournalModal";
+import { useToast } from "../../components/CustomToast";
 import { AuthContext } from "../../context/AuthContext";
 import { COLORS } from "../../constants/colors";
 import { compressSnapImage } from "../../utils/imageCompress";
@@ -32,12 +36,15 @@ export default function CameraScreen() {
     streak,
     postedToday,
   } = useContext(AuthContext);
+  const { showToast } = useToast();
   const cameraRef = useRef(null);
   const [permission, requestPermission] = useCameraPermissions();
   const [hasCaptured, setHasCaptured] = useState(false);
   const [capturedImageUri, setCapturedImageUri] = useState(null);
   const [selectedMood, setSelectedMood] = useState(null);
   const [caption, setCaption] = useState("");
+  const [emojiPickerVisible, setEmojiPickerVisible] = useState(false);
+  const [journalModalVisible, setJournalModalVisible] = useState(false);
   const [posting, setPosting] = useState(false);
   const [cameraFacing, setCameraFacing] = useState("back");
   const [flashEnabled, setFlashEnabled] = useState(false);
@@ -128,8 +135,9 @@ export default function CameraScreen() {
 
       setCapturedImageUri(photo.uri);
       setHasCaptured(true);
-      setSelectedMood(null);
+      setSelectedMood(moodOptions[0]);
       setCaption("");
+      showToast("Photo captured. Add your mood and note.", "success");
     } catch (error) {
       setScreenFlashVisible(false);
       const message =
@@ -144,17 +152,16 @@ export default function CameraScreen() {
     setCapturedImageUri(null);
     setSelectedMood(null);
     setCaption("");
-    setCaption("");
   };
 
   const handlePost = async () => {
     if (!selectedMood) {
-      Alert.alert("Choose your mood", "Pick a mood before posting your snap.");
+      showToast("Pick a mood before posting your snap.", "warning");
       return;
     }
 
     if (!capturedImageUri) {
-      Alert.alert("No snap", "Take a snap before posting.");
+      showToast("Take a snap before posting.", "warning");
       return;
     }
 
@@ -170,31 +177,18 @@ export default function CameraScreen() {
         softFilterEnabled,
       });
 
-      Alert.alert(
-        "MoodSnap posted",
-        `Your snap was saved with mood: ${selectedMood.emoji} ${selectedMood.label}`,
-        [
-          { text: "Stay here", style: "cancel" },
-          {
-            text: "View feed",
-            onPress: () => {
-              refreshFeed?.();
-              router.push("/tabs/feed");
-            },
-          },
-        ]
-      );
-
       refreshFeed?.();
       await refreshStreak?.();
       setHasCaptured(false);
       setCapturedImageUri(null);
       setSelectedMood(null);
       setCaption("");
+      showToast(`Saved as ${selectedMood.emoji} ${selectedMood.label}`, "success");
+      router.push("/tabs/feed");
     } catch (error) {
-      Alert.alert(
-        "Post failed",
-        error instanceof Error ? error.message : "Could not post your snap."
+      showToast(
+        error instanceof Error ? error.message : "Could not post your snap.",
+        "error"
       );
     } finally {
       setPosting(false);
@@ -328,17 +322,13 @@ export default function CameraScreen() {
               </View>
             )}
 
-            <View style={styles.captionOverlay}>
-              <TextInput
-                style={styles.captionInput}
-                value={caption}
-                onChangeText={setCaption}
-                placeholder="Add a note..."
-                placeholderTextColor="#cfcfcf"
-                maxLength={160}
-                multiline
-              />
-            </View>
+            {!!caption.trim() && (
+              <View style={styles.journalPreviewOverlay}>
+                <Text style={styles.journalPreviewText} numberOfLines={3}>
+                  {caption.trim()}
+                </Text>
+              </View>
+            )}
           </>
         )}
       </View>
@@ -355,8 +345,37 @@ export default function CameraScreen() {
         <>
           <Text style={styles.sectionTitle}>How are you feeling?</Text>
 
+          <TouchableOpacity
+            style={[
+              styles.moodSummary,
+              selectedMood && { borderColor: selectedMood.color },
+            ]}
+            onPress={() => setEmojiPickerVisible(true)}
+            activeOpacity={0.82}
+            accessibilityRole="button"
+            accessibilityLabel="Open mood picker"
+          >
+            <View
+              style={[
+                styles.selectedMoodOrb,
+                selectedMood && { backgroundColor: selectedMood.color },
+              ]}
+            >
+              <Text style={styles.selectedMoodEmoji}>
+                {selectedMood?.emoji || "🙂"}
+              </Text>
+            </View>
+            <View style={styles.moodSummaryTextWrap}>
+              <Text style={styles.moodSummaryLabel}>
+                {selectedMood?.label || "Choose mood"}
+              </Text>
+              <Text style={styles.moodSummaryHint}>Tap to open all moods</Text>
+            </View>
+            <SmilePlus size={22} color="#fff" strokeWidth={2.7} />
+          </TouchableOpacity>
+
           <View style={styles.moodRow}>
-            {moodOptions.map((mood) => (
+            {moodOptions.slice(0, 5).map((mood) => (
               <TouchableOpacity
                 key={mood.label}
                 style={[
@@ -371,7 +390,39 @@ export default function CameraScreen() {
                 <Text style={styles.moodEmoji}>{mood.emoji}</Text>
               </TouchableOpacity>
             ))}
+            <TouchableOpacity
+              style={styles.moodButton}
+              onPress={() => setEmojiPickerVisible(true)}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel="More moods"
+            >
+              <Text style={styles.moreMoodText}>+</Text>
+            </TouchableOpacity>
           </View>
+
+          <TouchableOpacity
+            style={[styles.journalCard, caption.trim() && styles.journalCardActive]}
+            onPress={() => setJournalModalVisible(true)}
+            activeOpacity={0.82}
+            accessibilityRole="button"
+            accessibilityLabel={caption.trim() ? "Edit journal note" : "Add journal note"}
+          >
+            <View style={styles.journalIconBubble}>
+              <BookText size={19} color="#fff" strokeWidth={2.7} />
+            </View>
+            <View style={styles.journalTextWrap}>
+              <Text style={styles.journalTitle}>
+                {caption.trim() ? "Journal added" : "Add journal"}
+              </Text>
+              <Text style={styles.journalBody} numberOfLines={2}>
+                {caption.trim() || "Save a quick note with this snap."}
+              </Text>
+            </View>
+            <Text style={styles.journalAction}>
+              {caption.trim() ? "Edit" : "Add"}
+            </Text>
+          </TouchableOpacity>
 
           <View style={styles.actionRow}>
             <TouchableOpacity style={styles.secondaryButton} onPress={handleRetake}>
@@ -390,6 +441,20 @@ export default function CameraScreen() {
           </View>
         </>
       )}
+
+      <EmojiPicker
+        visible={emojiPickerVisible}
+        selectedMood={selectedMood}
+        onSelect={setSelectedMood}
+        onClose={() => setEmojiPickerVisible(false)}
+      />
+
+      <JournalModal
+        visible={journalModalVisible}
+        initialText={caption}
+        onSave={setCaption}
+        onClose={() => setJournalModalVisible(false)}
+      />
 
       <Modal
         visible={friendModalVisible}
@@ -616,6 +681,43 @@ const styles = StyleSheet.create({
     gap: 12,
     marginTop: 16,
   },
+  moodSummary: {
+    marginTop: 16,
+    borderRadius: 24,
+    borderWidth: 1.5,
+    borderColor: "#292929",
+    backgroundColor: "#161616",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  selectedMoodOrb: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: "#2b2b2b",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  selectedMoodEmoji: {
+    fontSize: 27,
+  },
+  moodSummaryTextWrap: {
+    flex: 1,
+  },
+  moodSummaryLabel: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "900",
+  },
+  moodSummaryHint: {
+    color: "#9a9a9a",
+    fontSize: 12,
+    fontWeight: "800",
+    marginTop: 3,
+  },
   moodButton: {
     width: 54,
     height: 54,
@@ -627,40 +729,73 @@ const styles = StyleSheet.create({
   moodEmoji: {
     fontSize: 25,
   },
-  captionInput: {
-    minHeight: 52,
-    maxHeight: 100,
-    borderRadius: 18,
-    backgroundColor: "#151515",
-    borderWidth: 1,
-    borderColor: "#2b2b2b",
+  moreMoodText: {
     color: "#fff",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    fontSize: 15,
-    fontWeight: "800",
-    marginTop: 16,
-    marginBottom: 14,
+    fontSize: 28,
+    fontWeight: "900",
+    lineHeight: 30,
   },
-  captionOverlay: {
+  journalCard: {
+    marginTop: 16,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: "#2B2B2B",
+    backgroundColor: "#151515",
+    padding: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  journalCardActive: {
+    borderColor: COLORS.primary,
+    backgroundColor: "rgba(255,105,180,0.12)",
+  },
+  journalIconBubble: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: "#292929",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  journalTextWrap: {
+    flex: 1,
+  },
+  journalTitle: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "900",
+  },
+  journalBody: {
+    color: "#aaa",
+    fontSize: 12,
+    fontWeight: "800",
+    lineHeight: 17,
+    marginTop: 3,
+  },
+  journalAction: {
+    color: COLORS.primary,
+    fontSize: 13,
+    fontWeight: "900",
+  },
+  journalPreviewOverlay: {
     position: "absolute",
     left: 18,
     right: 18,
     bottom: 18,
     zIndex: 4,
-  },
-  captionInput: {
-    minHeight: 46,
-    maxHeight: 92,
-    borderRadius: 18,
-    backgroundColor: "rgba(0,0,0,0.58)",
+    borderRadius: 20,
+    backgroundColor: "rgba(0,0,0,0.62)",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.18)",
-    color: "#fff",
+    borderColor: "rgba(255,255,255,0.16)",
     paddingHorizontal: 14,
-    paddingVertical: 10,
-    fontSize: 15,
+    paddingVertical: 12,
+  },
+  journalPreviewText: {
+    color: "#fff",
+    fontSize: 14,
     fontWeight: "800",
+    lineHeight: 20,
   },
   actionRow: {
     flexDirection: "row",

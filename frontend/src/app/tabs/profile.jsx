@@ -2,6 +2,7 @@ import React, { useContext, useEffect, useState } from "react";
 import {
   Alert,
   Linking,
+  Modal,
   ScrollView,
   Share,
   Text,
@@ -10,7 +11,10 @@ import {
 } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import * as ImagePicker from "expo-image-picker";
+import { CameraView, useCameraPermissions } from "expo-camera";
 import { router } from "expo-router";
+import QRCode from "react-native-qrcode-svg";
+import { QrCode, ScanLine, X } from "lucide-react-native";
 import {
   acceptFriendRequestApi,
   blockUserApi,
@@ -35,6 +39,7 @@ import FriendsModal from "../../components/profile/FriendsModal";
 import ProfileHeader from "../../components/profile/ProfileHeader";
 import { Section, SettingRow } from "../../components/profile/ProfileSections";
 import { profileStyles as styles } from "../../components/profile/profileStyles";
+import { useToast } from "../../components/CustomToast";
 import {
   APP_STORE_URL,
   buildDisplayFriendLink,
@@ -51,7 +56,23 @@ const aboutItems = [
   { icon: "🔒", label: "Privacy Policy" },
 ];
 
+const isHexColor = (value) => /^#[0-9a-fA-F]{6}$/.test(String(value || ""));
+
+const getReadableTextColor = (hex) => {
+  if (!isHexColor(hex)) {
+    return "#fff";
+  }
+
+  const red = parseInt(hex.slice(1, 3), 16);
+  const green = parseInt(hex.slice(3, 5), 16);
+  const blue = parseInt(hex.slice(5, 7), 16);
+  const luminance = (0.299 * red + 0.587 * green + 0.114 * blue) / 255;
+
+  return luminance > 0.58 ? "#000" : "#fff";
+};
+
 export default function ProfileScreen() {
+  const { showToast } = useToast();
   const {
     user,
     logout,
@@ -86,6 +107,9 @@ export default function ProfileScreen() {
   const [friendsError, setFriendsError] = useState("");
   const [friendLinkInput, setFriendLinkInput] = useState("");
   const [sendingFriendRequest, setSendingFriendRequest] = useState(false);
+  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
+  const [qrScannerVisible, setQrScannerVisible] = useState(false);
+  const [scanLocked, setScanLocked] = useState(false);
 
   useEffect(() => {
     refreshAppData?.();
@@ -107,9 +131,76 @@ export default function ProfileScreen() {
     buildDisplayFriendLink(activeUsername) || "Loading share URL...";
   const shareFriendLink = buildShareFriendLink(activeUsername);
   const profileColor = accentColor || user?.profileColor || COLORS.primary;
+  const profileColorText = getReadableTextColor(profileColor);
+  const qrPayload = JSON.stringify({
+    type: "moodsnap_friend",
+    userId: user?.id || "",
+    username: activeUsername || "",
+    link: shareFriendLink || displayFriendLink,
+  });
+  const qrCodeValue = shareFriendLink || qrPayload;
 
   const getInviteMessage = () =>
     `Add me on MoodSnap ${displayFriendLink} then share our mood`;
+
+  const handleOpenQrScanner = async () => {
+    if (!cameraPermission?.granted) {
+      const result = await requestCameraPermission();
+
+      if (!result.granted) {
+        showToast("Camera permission is required to scan QR codes.", "error");
+        return;
+      }
+    }
+
+    setScanLocked(false);
+    setQrScannerVisible(true);
+  };
+
+  const handleQrScanned = async (result) => {
+    if (scanLocked) {
+      return;
+    }
+
+    setScanLocked(true);
+
+    try {
+      const rawData = result?.data || result?.nativeEvent?.data || "";
+      const trimmedData = String(rawData).trim();
+      let receiverIdOrUsername = "";
+
+      if (trimmedData.startsWith("{")) {
+        const payload = JSON.parse(trimmedData);
+
+        if (payload?.type === "moodsnap_friend") {
+          receiverIdOrUsername = payload.username || payload.userId;
+        }
+      } else {
+        receiverIdOrUsername = extractFriendIdentifier(trimmedData);
+      }
+
+      receiverIdOrUsername = String(receiverIdOrUsername || "")
+        .replace(/^@+/, "")
+        .trim();
+
+      if (!receiverIdOrUsername) {
+        throw new Error("This QR code is not a MoodSnap friend code.");
+      }
+
+      await sendFriendRequestApi(receiverIdOrUsername);
+      await Promise.allSettled([refreshAppData?.(), loadFriendRequests()]);
+      setQrScannerVisible(false);
+      showToast(`Friend request sent to ${receiverIdOrUsername}.`, "success");
+    } catch (error) {
+      showToast(
+        error.response?.data?.message ||
+          error.message ||
+          "Could not scan this QR code.",
+        "error"
+      );
+      setScanLocked(false);
+    }
+  };
 
   const handleSignOut = async () => {
     Alert.alert("Sign out", "Are you sure you want to sign out?", [
@@ -517,6 +608,49 @@ export default function ProfileScreen() {
         onPressAvatar={handleEditProfilePhoto}
       />
 
+      <View style={[styles.qrCard, { borderColor: profileColor }]}>
+        <View style={styles.qrHeader}>
+          <View>
+            <Text style={styles.qrEyebrow}>Friend QR</Text>
+            <Text style={styles.qrTitle}>Add friends faster</Text>
+          </View>
+          <View style={[styles.qrIconBubble, { backgroundColor: profileColor }]}>
+            <QrCode size={22} color={profileColorText} strokeWidth={2.8} />
+          </View>
+        </View>
+
+        <View style={styles.qrBody}>
+          <View style={styles.qrCodeWrap}>
+            <QRCode
+              value={qrCodeValue}
+              size={126}
+              backgroundColor="#fff"
+              color="#111"
+            />
+          </View>
+          <View style={styles.qrCopyWrap}>
+            <Text style={styles.qrHandle} numberOfLines={1}>
+              @{activeUsername || "moodsnap"}
+            </Text>
+            <Text style={styles.qrHint}>
+              Friends can scan this code to send a request.
+            </Text>
+            <TouchableOpacity
+              style={[styles.qrScanButton, { backgroundColor: profileColor }]}
+              onPress={handleOpenQrScanner}
+              activeOpacity={0.82}
+              accessibilityRole="button"
+              accessibilityLabel="Scan friend QR code"
+            >
+              <ScanLine size={18} color={profileColorText} strokeWidth={2.8} />
+              <Text style={[styles.qrScanButtonText, { color: profileColorText }]}>
+                Scan QR
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+
       <Section title="General">
         <SettingRow icon="Aa" label="Edit profile" onPress={handleOpenEditProfile} />
         <SettingRow
@@ -615,6 +749,37 @@ export default function ProfileScreen() {
         onSubmitFriendLink={handleSubmitFriendLink}
         sendingFriendRequest={sendingFriendRequest}
       />
+
+      <Modal
+        visible={qrScannerVisible}
+        animationType="slide"
+        onRequestClose={() => setQrScannerVisible(false)}
+      >
+        <View style={styles.qrScannerScreen}>
+          <CameraView
+            style={styles.qrScannerCamera}
+            onBarcodeScanned={scanLocked ? undefined : handleQrScanned}
+            barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
+          />
+          <View style={styles.qrScannerTopBar}>
+            <TouchableOpacity
+              onPress={() => setQrScannerVisible(false)}
+              style={styles.qrScannerClose}
+              accessibilityRole="button"
+              accessibilityLabel="Close QR scanner"
+            >
+              <X size={22} color="#fff" strokeWidth={2.8} />
+            </TouchableOpacity>
+          </View>
+          <View style={styles.qrScannerFrame} pointerEvents="none" />
+          <View style={styles.qrScannerFooter}>
+            <Text style={styles.qrScannerTitle}>Scan friend QR</Text>
+            <Text style={styles.qrScannerHint}>
+              Place the MoodSnap code inside the frame.
+            </Text>
+          </View>
+        </View>
+      </Modal>
 
       <EditNameModal
         visible={isEditingName}

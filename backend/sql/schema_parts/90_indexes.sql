@@ -28,6 +28,11 @@ create index if not exists moodsnap_user_created_at_idx
 drop index if exists public.moodsnap_user_id_idx;
 drop index if exists public.moodsnap_created_at_idx;
 
+create index if not exists diaries_user_entry_date_idx
+  on public.diaries (user_id, entry_date desc);
+create index if not exists diaries_entry_date_created_idx
+  on public.diaries (entry_date desc, created_at desc);
+
 drop index if exists public.app_ratings_user_id_idx;
 drop index if exists public.app_ratings_rating_idx;
 
