@@ -51,6 +51,8 @@ alter table public.pending_registrations add column if not exists otp_request_wi
 update public.pending_registrations
 set username_normalized = lower(trim(username))
 where username_normalized is null;
+create unique index if not exists pending_registrations_email_unique_idx
+  on public.pending_registrations (email);
 
 create table if not exists public.password_reset_otps (
   id uuid primary key default gen_random_uuid(),
@@ -162,6 +164,9 @@ create table if not exists public.diaries (
   constraint diaries_user_entry_date_unique unique (user_id, entry_date)
 );
 
+-- Diary entries are stored here. Each user can have one diary per local day.
+-- The feed and profile views can query this table directly by user_id, entry_date, or created_at.
+
 alter table public.diaries add column if not exists mood text default 'normal';
 alter table public.diaries add column if not exists cover_image_url text;
 alter table public.diaries add column if not exists updated_at timestamptz not null default now();
@@ -259,6 +264,8 @@ create index if not exists diaries_user_entry_date_idx
   on public.diaries (user_id, entry_date desc);
 create index if not exists diaries_entry_date_created_idx
   on public.diaries (entry_date desc, created_at desc);
+create index if not exists diaries_user_entry_date_created_idx
+  on public.diaries (user_id, entry_date desc, created_at desc);
 
 drop index if exists public.app_ratings_user_id_idx;
 drop index if exists public.app_ratings_rating_idx;

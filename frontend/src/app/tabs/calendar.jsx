@@ -311,19 +311,19 @@ export default function CalendarScreen() {
                   <Text style={styles.recentEmoji}>{mood.emoji}</Text>
                 </View>
                 <View style={styles.recentTextWrap}>
-                  <Text style={styles.recentMood}>{entry.mood}</Text>
+                  <Text style={styles.recentMood}>{mood.mood}</Text>
                   <Text style={styles.recentMeta}>
-                    {getEntryDateLabel(entry)} · {entry.snaps?.length || 1} snap
-                    {(entry.snaps?.length || 1) > 1 ? "s" : ""}
+                    {getEntryDateLabel(entry)} · {snapCount} snap
+                    {snapCount > 1 ? "s" : ""}
                   </Text>
                 </View>
                 {entry.imageUrl && (
                   <Image source={{ uri: entry.imageUrl }} style={styles.recentImage} />
                 )}
-                  <Text style={styles.recentMood}>{mood.mood}</Text>
+              </TouchableOpacity>
             );
-                    {getEntryDateLabel(entry)} · {snapCount} snap
-                    {snapCount > 1 ? "s" : ""}
+          })
+        ) : (
           <View style={styles.emptyCard}>
             <Text style={styles.emptyTitle}>No moods yet</Text>
             <Text style={styles.emptyBody}>

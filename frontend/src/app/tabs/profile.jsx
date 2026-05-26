@@ -11,7 +11,7 @@ import {
 } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import * as ImagePicker from "expo-image-picker";
-import { CameraView, useCameraPermissions } from "expo-camera";
+import { Camera, useCameraPermissions } from "expo-camera";
 import { router } from "expo-router";
 import QRCode from "react-native-qrcode-svg";
 import { QrCode, ScanLine, X } from "lucide-react-native";
@@ -756,10 +756,10 @@ export default function ProfileScreen() {
         onRequestClose={() => setQrScannerVisible(false)}
       >
         <View style={styles.qrScannerScreen}>
-          <CameraView
+          <Camera
             style={styles.qrScannerCamera}
-            onBarcodeScanned={scanLocked ? undefined : handleQrScanned}
-            barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
+            onBarCodeScanned={scanLocked ? undefined : handleQrScanned}
+            barCodeScannerSettings={{ barCodeTypes: ["qr"] }}
           />
           <View style={styles.qrScannerTopBar}>
             <TouchableOpacity

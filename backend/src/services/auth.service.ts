@@ -207,26 +207,36 @@ export const signupRequestOtpService = async ({
     currentPending?.otp_request_window_start
   );
 
-  const { error: upsertError } = await supabase
-    .from("pending_registrations")
-    .upsert(
-      {
-        username: cleanUsername,
-        username_normalized: usernameNormalized,
-        display_name: cleanDisplayName,
-        email: normalizedEmail,
-        password_hash: passwordHash,
-        otp_hash: otpHash,
-        expires_at: expiresAt,
-        attempt_count: 0,
-        ...rateState,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "email" }
-    );
+  const pendingRegistrationPayload = {
+    username: cleanUsername,
+    username_normalized: usernameNormalized,
+    display_name: cleanDisplayName,
+    email: normalizedEmail,
+    password_hash: passwordHash,
+    otp_hash: otpHash,
+    expires_at: expiresAt,
+    attempt_count: 0,
+    ...rateState,
+    updated_at: new Date().toISOString(),
+  };
 
-  if (upsertError) {
-    throw new Error(upsertError.message);
+  if (currentPending) {
+    const { error: updateError } = await supabase
+      .from("pending_registrations")
+      .update(pendingRegistrationPayload)
+      .eq("email", normalizedEmail);
+
+    if (updateError) {
+      throw new Error(updateError.message);
+    }
+  } else {
+    const { error: insertError } = await supabase
+      .from("pending_registrations")
+      .insert(pendingRegistrationPayload);
+
+    if (insertError) {
+      throw new Error(insertError.message);
+    }
   }
 
   await sendOtpEmail(normalizedEmail, otp);
