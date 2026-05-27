@@ -4,12 +4,17 @@
     "slug": "moodsnap",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/snapmood.png",
     "scheme": "moodsnap",
     "userInterfaceStyle": "automatic",
     "ios": {
       "icon": "./assets/expo.icon",
       "bundleIdentifier": "com.shinny05.frontend",
+      "splash": {
+        "image": "./assets/images/snapmood.png",
+        "resizeMode": "cover",
+        "backgroundColor": "#000000"
+      },
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
@@ -17,7 +22,7 @@
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
+        "foregroundImage": "./assets/images/snapmood.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
@@ -27,6 +32,11 @@
       "output": "static",
       "favicon": "./assets/images/favicon.png"
     },
+    "splash": {
+      "image": "./assets/images/snapmood.png",
+      "resizeMode": "cover",
+      "backgroundColor": "#000000"
+    },
     "plugins": [
       "expo-router",
       [
@@ -34,7 +44,7 @@
         {
           "backgroundColor": "#208AEF",
           "android": {
-            "image": "./assets/images/splash-icon.png",
+            "image": "./assets/images/snapmood.png",
             "imageWidth": 76
           }
         }

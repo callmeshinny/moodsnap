@@ -11,6 +11,7 @@ import {
   View,
 } from "react-native";
 import { ChevronLeft, ChevronRight } from "lucide-react-native";
+import { MaterialIcons } from "@expo/vector-icons";
 import { getMoodCalendarApi } from "../../api/moodApi";
 import { AuthContext } from "../../context/AuthContext";
 import { COLORS } from "../../constants/colors";
@@ -166,17 +167,18 @@ function MonthGrid({ currentMonth, entriesByDate, onOpenEntry }) {
                   onPress={pressable ? () => onOpenEntry(entry) : undefined}
                   accessibilityRole={pressable ? "button" : undefined}
                 >
-                  <Text
-                    style={[
-                      styles.dayNumber,
-                      !day.isCurrentMonth && styles.outsideDayNumber,
-                      day.isToday && styles.todayNumber,
-                    ]}
-                  >
-                    {day.date.getDate()}
-                  </Text>
-                  {mood && (
-                    <View style={[styles.moodDot, { backgroundColor: mood.color }]}>
+                  {!mood ? (
+                    <Text
+                      style={[
+                        styles.dayNumber,
+                        !day.isCurrentMonth && styles.outsideDayNumber,
+                        day.isToday && styles.todayNumber,
+                      ]}
+                    >
+                      {day.date.getDate()}
+                    </Text>
+                  ) : (
+                    <View style={styles.moodDot}>
                       <Text style={styles.moodEmoji}>{mood.emoji}</Text>
                     </View>
                   )}
@@ -258,7 +260,10 @@ export default function CalendarScreen() {
             <Text style={styles.title}>Mood History</Text>
           </View>
           <View style={styles.streakBadge}>
-            <Text style={styles.streakText}>🔥 {streak || 0}</Text>
+            <View style={styles.streakRow}>
+              <MaterialIcons name="whatshot" size={16} color="#777" />
+              <Text style={[styles.streakText, { marginLeft: 8 }]}>{streak || 0}</Text>
+            </View>
             <Text style={styles.streakLabel}>day streak</Text>
           </View>
         </View>
@@ -443,6 +448,10 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     alignItems: "center",
   },
+  streakRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
   streakText: {
     color: "#fff",
     fontSize: 18,
@@ -541,16 +550,17 @@ const styles = StyleSheet.create({
   },
   moodDot: {
     position: "absolute",
-    left: 5,
-    right: 5,
-    bottom: 5,
-    top: 20,
-    borderRadius: 10,
+    top: "50%",
+    left: "50%",
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: "center",
     justifyContent: "center",
+    transform: [{ translateY: -20 }, { translateX: -20 }],
   },
   moodEmoji: {
-    fontSize: 17,
+    fontSize: 20,
   },
   recentTitle: {
     color: "#fff",
