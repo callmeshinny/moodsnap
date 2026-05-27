@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useFocusEffect } from "@react-navigation/native";
 import * as Clipboard from "expo-clipboard";
 import * as ImagePicker from "expo-image-picker";
 import { CameraView, useCameraPermissions } from "expo-camera";
@@ -79,6 +80,7 @@ export default function ProfileScreen() {
     friendCount,
     refreshAppData,
     refreshFriendLink,
+    refreshFriendCount,
     updateUser,
     updateProfilePhoto,
   } = useContext(AuthContext);
@@ -125,6 +127,13 @@ export default function ProfileScreen() {
   useEffect(() => {
     setAccentColor(user?.profileColor || COLORS.primary);
   }, [user?.profileColor]);
+
+  // Auto-refresh friend requests when profile tab is focused
+  useFocusEffect(
+    React.useCallback(() => {
+      loadFriendRequests();
+    }, [])
+  );
 
   const activeUsername = inviteUsername || user?.username;
   const displayFriendLink =
@@ -433,6 +442,7 @@ export default function ProfileScreen() {
     try {
       await acceptFriendRequestApi(requestId);
       await refreshAppData?.();
+      await refreshFriendCount?.();
       await loadFriendRequests();
       if (friendsVisible) {
         const result = await getFriendsApi();
@@ -493,6 +503,7 @@ export default function ProfileScreen() {
           try {
             await unfriendApi(friend.id);
             await refreshAppData?.();
+            await refreshFriendCount?.();
             await refreshFriendsModal();
           } catch (error) {
             Alert.alert(
@@ -518,6 +529,7 @@ export default function ProfileScreen() {
             try {
               await blockUserApi(friend.id);
               await refreshAppData?.();
+              await refreshFriendCount?.();
               await refreshFriendsModal();
             } catch (error) {
               Alert.alert(

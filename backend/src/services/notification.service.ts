@@ -282,3 +282,55 @@ export const sendNewSnapNotifications = async ({
 
   return { sent: messages.length };
 };
+
+export const sendFriendRequestNotification = async (
+  senderId: string,
+  receiverId: string
+) => {
+  const sender = await getUserById(senderId);
+  if (!sender) {
+    console.warn("Sender not found for friend request notification");
+    return { sent: 0 };
+  }
+
+  const { data: tokens, error } = await supabase
+    .from("notification_tokens")
+    .select("expo_push_token")
+    .eq("user_id", receiverId)
+    .eq("is_active", true);
+
+  if (error) {
+    console.error("Failed to fetch notification tokens:", error.message);
+    return { sent: 0 };
+  }
+
+  const validTokens = (tokens || [])
+    .map((item) => item.expo_push_token)
+    .filter((token) => typeof token === "string" && isExpoPushToken(token));
+
+  if (validTokens.length === 0) {
+    return { sent: 0 };
+  }
+
+  const displayLabel = sender.displayLabel || sender.username || "A friend";
+
+  const messages = validTokens.map((token) => ({
+    to: token,
+    sound: "default" as const,
+    title: `${displayLabel} sent you a friend request`,
+    body: "Tap to view and accept",
+    data: {
+      type: "FRIEND_REQUEST",
+      senderId,
+      senderUsername: sender.username,
+      senderDisplayLabel: displayLabel,
+      senderAvatarUrl: sender.avatarUrl || null,
+      senderProfileColor: sender.profileColor || null,
+      url: "/tabs/profile",
+    },
+  }));
+
+  await sendExpoMessages(messages);
+
+  return { sent: messages.length };
+};

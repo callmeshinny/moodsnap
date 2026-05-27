@@ -141,12 +141,8 @@ export default function CameraScreen() {
         `${receiverId} will see your request in their profile.`
       );
     } catch (error) {
-      Alert.alert(
-        "Could not send request",
-        error.response?.data?.message ||
-          error.message ||
-          "Please check the link and try again."
-      );
+      // Silently fail on error - don't show error toast
+      console.error("Friend request error:", error);
     } finally {
       setSendingFriendRequest(false);
     }

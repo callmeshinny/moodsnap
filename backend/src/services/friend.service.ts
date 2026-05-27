@@ -1,5 +1,6 @@
 import { supabase } from "../config/supabase";
 import { getUserById, getUserByUsername, getUsersByIds } from "./user.service";
+import { sendFriendRequestNotification } from "./notification.service";
 
 type FriendshipRecord = {
   id: string;
@@ -138,6 +139,11 @@ export const sendFriendRequest = async (
       throw new Error(error.message);
     }
 
+    // Send notification to receiver
+    sendFriendRequestNotification(senderId, targetUserId).catch((err) => {
+      console.error("Failed to send friend request notification:", err);
+    });
+
     return mapFriendship(updated);
   }
 
@@ -155,6 +161,11 @@ export const sendFriendRequest = async (
   if (error) {
     throw new Error(error.message);
   }
+
+  // Send notification to receiver
+  sendFriendRequestNotification(senderId, targetUserId).catch((err) => {
+    console.error("Failed to send friend request notification:", err);
+  });
 
   return mapFriendship(friendship);
 };
