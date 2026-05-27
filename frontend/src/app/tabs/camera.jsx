@@ -11,6 +11,7 @@ import {
   TouchableOpacity,
   TouchableWithoutFeedback,
   View,
+  ScrollView,
   Animated,
   PanResponder,
 } from "react-native";
@@ -43,6 +44,31 @@ export default function CameraScreen() {
   const cameraRef = useRef(null);
   const sheetTranslate = useRef(new Animated.Value(0)).current;
   const SHEET_EXPANDED = -260;
+
+  // Tab navigation order: diary, feed, camera, calendar, profile
+  const TABS = ["diary", "feed", "camera", "calendar", "profile"];
+  const CURRENT_TAB_INDEX = 2; // camera is at index 2
+  
+  // Horizontal swipe responder for switching tabs (left/right)
+  const topPanResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, gesture) => {
+        // Trigger only for mostly-horizontal swipes with sufficient distance
+        return Math.abs(gesture.dx) > 40 && Math.abs(gesture.dx) > Math.abs(gesture.dy);
+      },
+      onPanResponderRelease: (_, gesture) => {
+        const threshold = 80;
+        
+        if (gesture.dx > threshold && CURRENT_TAB_INDEX > 0) {
+          // swipe right -> previous tab
+          router.push(`/tabs/${TABS[CURRENT_TAB_INDEX - 1]}`);
+        } else if (gesture.dx < -threshold && CURRENT_TAB_INDEX < TABS.length - 1) {
+          // swipe left -> next tab
+          router.push(`/tabs/${TABS[CURRENT_TAB_INDEX + 1]}`);
+        }
+      },
+    })
+  ).current;
   const panResponder = useRef(
     PanResponder.create({
       onMoveShouldSetPanResponder: (_, gesture) => {
@@ -160,7 +186,9 @@ export default function CameraScreen() {
       setHasCaptured(true);
       setSelectedMood(moodOptions[0]);
       setCaption("");
-      showToast("Photo captured. Add your mood and note.", "success");
+      // Keep the post sheet below the captured image by default.
+      // Users can still drag the sheet up manually if they want to expand it.
+      sheetTranslate.setValue(0);
     } catch (error) {
       setScreenFlashVisible(false);
       const message =
@@ -241,12 +269,16 @@ export default function CameraScreen() {
 
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
-      <View style={styles.container}>
+      <View style={styles.container} {...topPanResponder.panHandlers}>
+        <ScrollView
+          contentContainerStyle={{ flexGrow: 1 }}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
       <View
         style={[
           styles.preview,
-          { height: hasCaptured ? "44%" : "64%" },
-          hasCaptured && selectedMood && { borderColor: selectedMood.color },
+          hasCaptured && selectedMood && { borderColor: selectedMood.color, borderWidth: 6 },
         ]}
       >
         <View style={styles.logoRow}>
@@ -333,28 +365,6 @@ export default function CameraScreen() {
               style={styles.camera}
               blurRadius={softFilterEnabled ? 0.4 : 0}
             />
-            {softFilterEnabled && <View pointerEvents="none" style={styles.softFilterOverlay} />}
-
-            {selectedMood && (
-              <View
-                style={[
-                  styles.selectedMoodTopBadge,
-                  { backgroundColor: selectedMood.color },
-                ]}
-              >
-                <Text style={styles.moodBadgeText}>
-                  {selectedMood.emoji} {selectedMood.label}
-                </Text>
-              </View>
-            )}
-
-            {!!caption.trim() && (
-              <View style={styles.journalPreviewOverlay}>
-                <Text style={styles.journalPreviewText} numberOfLines={3}>
-                  {caption.trim()}
-                </Text>
-              </View>
-            )}
           </>
         )}
       </View>
@@ -388,7 +398,11 @@ export default function CameraScreen() {
               <View
                 style={[
                   styles.selectedMoodOrb,
-                  selectedMood && { backgroundColor: selectedMood.color },
+                  selectedMood && {
+                    backgroundColor: "#fff",
+                    borderWidth: 3,
+                    borderColor: selectedMood.color,
+                  },
                 ]}
               >
                 <Text style={styles.selectedMoodEmoji}>
@@ -536,6 +550,7 @@ export default function CameraScreen() {
         </View>
       </Modal>
 
+        </ScrollView>
       </View>
     </TouchableWithoutFeedback>
   );
@@ -547,20 +562,23 @@ const styles = StyleSheet.create({
     backgroundColor: "#000",
     padding: 20,
     paddingBottom: 140,
-    justifyContent: "center",
+    justifyContent: "flex-start",
   },
   preview: {
-    height: "64%",
+    width: "100%",
+    aspectRatio: 3 / 4,
     borderRadius: 32,
-    borderWidth: 4,
+    borderWidth: 6,
     borderColor: "#252525",
     backgroundColor: "#151515",
     justifyContent: "center",
     alignItems: "center",
     overflow: "hidden",
+    marginTop: 32,
   },
   camera: {
-    ...StyleSheet.absoluteFillObject,
+    width: "100%",
+    height: "100%",
   },
   logoRow: {
     position: "absolute",
@@ -900,11 +918,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   postSheet: {
-    position: "absolute",
-    left: 20,
-    right: 20,
-    bottom: 20,
-    zIndex: 6,
+      marginTop: 12,
     paddingBottom: 6,
   },
   friendCountBadge: {

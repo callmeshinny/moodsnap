@@ -70,7 +70,6 @@ export const createSnapApi = async ({
   });
 
   formData.append("mood", mood);
-  formData.append("softFilterEnabled", softFilterEnabled ? "true" : "false");
 
   if (caption) {
     formData.append("caption", caption);
